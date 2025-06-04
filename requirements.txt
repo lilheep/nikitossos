@@ -1,0 +1,8 @@
+peewee
+pymysql
+fastapi
+uvicorn
+pymssql
+playhouse
+pyodbc
+peewee_mssql
