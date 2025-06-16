@@ -14,6 +14,15 @@ class Users(BaseModel):
     full_name = CharField(max_length=100, null=False)
     number_phone = CharField(max_length=13, null=False, unique=True)
     #role = ---
+    
+class PasswordChangeRequest(BaseModel):
+    """"Запросы на смену пароля"""
+    id = AutoField()
+    user = ForeignKeyField(Users, backref='user_change', on_delete='CASCADE', null=False)
+    code = CharField(max_length=10)
+    created_at = DateTimeField(default=datetime.datetime.now())
+    expires_at = DateTimeField()
+    
 
 class Tours(BaseModel):
     """"Информация о турах"""
@@ -70,7 +79,7 @@ class TourDestinations(BaseModel):
     tour_id = ForeignKeyField(Tours, backref='tour_dest', on_delete='CASCADE', null=False)
     destinations_id = ForeignKeyField(Destinations, backref='dest_tour', on_delete='CASCADE', null=False)
 
-tables = [Users, Tours, StatusBooking, Bookings, PaymentsMethods, PaymentStatus, Payments, Destinations, TourDestinations]
+tables = [Users, Tours, StatusBooking, Bookings, PaymentsMethods, PaymentStatus, Payments, Destinations, TourDestinations, PasswordChangeRequest]
 
 def initialize_tables():
     '''Creating tables if they does not exists'''
