@@ -13,6 +13,8 @@ class Users(BaseModel):
     password = CharField(max_length=128, unique=False, null=False)
     full_name = CharField(max_length=100, null=False)
     number_phone = CharField(max_length=13, null=False, unique=True)
+    token = CharField(null=True, unique=True)
+    token_expires_at = DateTimeField(null=True)
     #role = ---
     
 class PasswordChangeRequest(BaseModel):

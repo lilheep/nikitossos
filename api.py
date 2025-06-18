@@ -6,6 +6,7 @@ from models import Users, Tours, StatusBooking, Bookings, PaymentsMethods, Payme
 from pydantic import BaseModel
 from email_utils import send_email, generation_confirmation_code
 from datetime import datetime, timedelta
+import uuid
 
 
 app = FastAPI()
@@ -15,6 +16,12 @@ def hash_password(password: str) -> str:
 
 EMAIL_REGEX = r'^[A-Za-zА-Яа-яЁё0-9._%+-]+@[A-Za-zА-Яа-яЁё-]+\.[A-Za-zА-Яа-яЁё-]{2,10}$'
 PHONE_REGEX = r'^[0-9+()\-#]{10,15}$'
+
+def get_user_by_token(token: str) -> Users:
+    user = Users.select().where(Users.token==token).first()
+    if not user:
+        raise HTTPException(401, 'Неверный или отсутствующий токен.')
+    return user
 
 class AuthRequest(BaseModel):
     email: str | None = None
@@ -70,7 +77,13 @@ async def auth_user(data: AuthRequest):
         if enter_hash_password != existing_user.password:
             raise HTTPException(401, 'Вы ввели неверный пароль! Попробуйте еще раз.')
         
-        return {'message': 'Вы успешно авторизовались.'}
+        token = str(uuid.uuid4())
+        existing_user.token = token
+        existing_user.save()
+        
+        return {'message': 'Вы успешно авторизовались.',
+                'token': token
+                }
     except HTTPException:
         raise
     
@@ -103,17 +116,22 @@ async def confirm_password_change(email: str, code: str, new_password: str):
         raise HTTPException(404, 'Пользователь с таким email не найден.')
     request = PasswordChangeRequest.select().where((PasswordChangeRequest.user==user)
                                                    & (PasswordChangeRequest.code==code)).order_by(PasswordChangeRequest.created_at.desc()).first()
-    
+
     if not request:
         raise HTTPException(404, 'Неверный код подтверждения.')
     
     if datetime.now() > request.expires_at:
         raise HTTPException(400, 'Срок действия кода истек. Попробуйте снова.')
     
-    Users.update({
+    updated_rows = Users.update({
             Users.password: hash_password(new_password)
         }).where(Users.id == request.user.id).execute()
+    
+    if updated_rows == 0:
+        raise HTTPException(500, 'Не удалось обновить пароль.')
     
     request.delete_instance()
     
     return {'message': 'Пароль успешно обновлен.'}
+
+# @app.delete()
