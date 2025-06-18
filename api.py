@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, Query
+from fastapi import FastAPI, HTTPException, Request, Query, Header, Depends, Form
 import hashlib
 from database import db_connection
 import re
@@ -21,6 +21,11 @@ def get_user_by_token(token: str) -> Users:
     user = Users.select().where(Users.token==token).first()
     if not user:
         raise HTTPException(401, 'Неверный или отсутствующий токен.')
+    if user.token_expires_at is None or datetime.now() > user.token_expires_at:
+        raise HTTPException(401, 'Срок действия токена истек.')
+
+    user.token_expires_at = datetime.now() + timedelta(hours=1)
+    user.save()
     return user
 
 class AuthRequest(BaseModel):
@@ -43,7 +48,7 @@ async def create_user(email: str, password: str, full_name: str, number_phone: s
                 email=email,
                 password=hashed_password,
                 full_name=full_name,
-                number_phone=number_phone
+                number_phone=number_phone,
             )
         return {'message': 'Вы успешно зарегистрировались!'}
     except Exception as e:
@@ -68,8 +73,7 @@ async def auth_user(data: AuthRequest):
         if email:
             query = Users.select().where(Users.email==email)
         elif number_phone:
-            query = Users.select().where(Users.number_phone==number_phone
-                                         )
+            query = Users.select().where(Users.number_phone==number_phone)
         existing_user = query.first() if query else None
         if not existing_user:
             raise HTTPException(404, 'Пользователь с таким email/номера телефона не существует.')
@@ -78,11 +82,14 @@ async def auth_user(data: AuthRequest):
             raise HTTPException(401, 'Вы ввели неверный пароль! Попробуйте еще раз.')
         
         token = str(uuid.uuid4())
+        expires_at = datetime.now() + timedelta(hours=1)
         existing_user.token = token
+        existing_user.token_expires_at = expires_at
         existing_user.save()
         
         return {'message': 'Вы успешно авторизовались.',
-                'token': token
+                'token': token,
+                'token_expires_at': expires_at.isoformat()
                 }
     except HTTPException:
         raise
@@ -134,4 +141,22 @@ async def confirm_password_change(email: str, code: str, new_password: str):
     
     return {'message': 'Пароль успешно обновлен.'}
 
-# @app.delete()
+@app.delete('/users/delete_profile/')
+async def delete_profile(token: str = Form(...)):
+    user = Users.select().where(Users.token == token).first()
+    if not user:
+        raise HTTPException(401, 'Пользователь не найден.')
+    user.delete_instance()
+    return {'message': 'Аккаунт успешно удален.'}
+
+@app.get('/users/me/')
+async def get_profile(token: str):
+    user = Users.select().where(Users.token == token).first()
+    if not user:
+        raise HTTPException(401, 'Пользователь не найден.')
+    return {
+        'id': user.id,
+        'email': user.email,
+        'full_name': user.full_name,
+        'number_phone': user.number_phone
+    }
