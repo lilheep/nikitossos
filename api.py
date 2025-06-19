@@ -3,11 +3,12 @@ import hashlib
 from database import db_connection
 import re
 from models import Users, Tours, StatusBooking, Bookings, PaymentsMethods, PaymentStatus, Payments, Destinations, TourDestinations, PasswordChangeRequest
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from email_utils import send_email, generation_confirmation_code
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import uuid
 from typing import Optional
+from pydantic import Field
 
 
 app = FastAPI()
@@ -47,9 +48,37 @@ class TourSchemaUpdate(BaseModel):
     price: Optional[int] = None
     days: Optional[int] = None
     country: Optional[str] = None
-  
+
+class StatusBookingSchema(BaseModel):
+    status_name: str
+
+class BookingSchemaCreate(BaseModel):
+    full_name: str
+    email: Optional[str]
+    birthday: date
+    tour_name: Optional[str] = None
+    status: Optional[str] = None
+    number_of_people: int = Field(gt=0, description='Количество человек должно быть больше нуля.')
+    
+class BookingSchemaUpdate(BaseModel):
+    user_id: Optional[int] = None
+    email: Optional[str] = None
+    birthday: Optional[date] = None
+    tour_id: Optional[int] = None
+    status: Optional[int] = None
+    number_of_people: Optional[int] = Field(default=None, gt=0, description='Количество человек должно быть больше нуля.')
+
+class BookingSchema(BaseModel):
+    user_id: int
+    email: str
+    birthday: date
+    tour_id: Optional[int]
+    status: Optional[str]
+    number_of_people: int
+    
+    
 @app.post('/users/register/', tags=['Users'])
-async def create_user(email: str, password: str, full_name: str, number_phone: str):
+async def create_user(email: str, password: str, full_name: str, number_phone: str): 
     if not re.fullmatch(EMAIL_REGEX, email) or not re.fullmatch(PHONE_REGEX, number_phone):
         raise HTTPException(400, 'Неверный формат данных email/номера телефона.')
     try:
@@ -251,3 +280,72 @@ async def delete_tour_by_id(tour_id: int):
         return {'message': 'Тур успешно удален.'}
     except Exception as e:
         raise HTTPException(500, f'Ошибка, тур не был удален: {e}')
+
+@app.post('/statusbooking/add_status', tags=['StatusBooking'])
+async def add_status_booking(data: StatusBookingSchema):
+    status = data.status_name
+    try:
+        StatusBooking.create(status_name=status)
+        return {'message': 'Статус успешно создан.'}
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при создании статуса: {e}')
+    
+@app.get('/statusbooking/get_all/', tags=['StatusBooking'])
+async def get_all_status_booking():
+    status = StatusBooking.select()
+    return [{
+        'Статус': s.status_name
+    } for s in status]
+
+@app.put('/statusbooking/edit_status/', tags=['StatusBooking'])
+async def edit_status_booking(status_id: int, data: StatusBookingSchema):
+    status = StatusBooking.select().where(StatusBooking.id==status_id).first()
+    if not status:
+        raise HTTPException(404, f'Указанного статуса не существует.')
+    try:
+        status.status_name = data.status_name
+        status.save()
+        return {'message': 'Статус успешно изменен.'}
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при внесении изменений: {e}')
+
+@app.get('/statusbooking/get_status_by_id/', tags=['StatusBooking'])
+async def get_status_by_id(status_id: int):
+    status = StatusBooking.select().where(StatusBooking.id==status_id).first()
+    if not status:
+        raise HTTPException(404, f'Указанного статуса не существует.')
+    return {
+        'Статус': status.status_name
+    }
+
+@app.post('/booking/create_booking/', tags=['Bookings'])
+def create_booking(data: BookingSchemaCreate):
+    try:
+        user = Users.get_or_none((Users.full_name==data.full_name) & (Users.email==data.email))
+        if not user:
+            raise HTTPException(404, 'Пользователеь не найден.')
+        
+        age = datetime.now().date() - data.birthday
+        if age < timedelta(days = 365 * 18):
+            raise HTTPException(403, 'Пользователю должно быть больше 18 лет.')
+        
+        tour = Tours.get_or_none(Tours.name==data.tour_name)
+        if not tour:
+            raise HTTPException(404, 'Тур не найден.')
+        
+        status_booking = StatusBooking.get_or_none(StatusBooking.status_name==data.status)
+        if not status_booking:
+            raise HTTPException(404, 'Статус не найден.')
+        
+        booking = Bookings.create(
+            user_id=user.id,
+            email=data.email,
+            birthday=data.birthday,
+            tour_id=tour.id,
+            booking_date=datetime.now(),
+            status=status_booking.id,
+            number_of_people=data.number_of_people
+        )
+        return {'message': 'Бронирование тура прошло успешно.'}
+    except Exception as e:
+        raise HTTPException(500, f'Произошла ошибка: {e}')

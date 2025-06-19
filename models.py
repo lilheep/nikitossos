@@ -1,4 +1,4 @@
-from peewee import Model, CharField, AutoField, IntegerField, ForeignKeyField, DateTimeField, Check
+from peewee import Model, CharField, AutoField, IntegerField, ForeignKeyField, DateTimeField, Check, DateField
 from database import db_connection
 import datetime
 
@@ -29,7 +29,7 @@ class PasswordChangeRequest(BaseModel):
 class Tours(BaseModel):
     """"Информация о турах"""
     id = AutoField()
-    name = CharField(max_length=100, null=False)
+    name = CharField(max_length=100, null=False, unique=True)
     description = CharField(max_length=255, null=True)
     price = IntegerField(null=False)
     days = IntegerField(null=False)
@@ -44,8 +44,10 @@ class Bookings(BaseModel):
     """"Бронирование туров"""
     booking_id = AutoField()
     user_id = ForeignKeyField(Users, backref='user', on_delete='CASCADE', null=False)
+    email = CharField(max_length=100, unique=True, null=False)
+    birthday = DateField(null=False)
     tour_id = ForeignKeyField(Tours, backref='tour', on_delete='SET NULL', null=True)
-    booking_date = DateTimeField(datetime.datetime.now())
+    booking_date = DateTimeField(null=False)
     status = ForeignKeyField(StatusBooking, backref='stat', on_delete='SET NULL', null=True)
     number_of_people = IntegerField()
 
