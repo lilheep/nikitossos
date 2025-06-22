@@ -50,6 +50,7 @@ class Bookings(BaseModel):
     booking_date = DateTimeField(null=False)
     status = ForeignKeyField(StatusBooking, backref='stat', on_delete='SET NULL', null=True)
     number_of_people = IntegerField()
+    booking_number = CharField(max_length=20, unique=True, null=False)
 
 class PaymentsMethods(BaseModel):
     """"Способы оплаты"""

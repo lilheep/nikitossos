@@ -53,19 +53,15 @@ class StatusBookingSchema(BaseModel):
     status_name: str
 
 class BookingSchemaCreate(BaseModel):
-    full_name: str
-    email: Optional[str]
     birthday: date
     tour_name: Optional[str] = None
     status: Optional[str] = None
     number_of_people: int = Field(gt=0, description='Количество человек должно быть больше нуля.')
     
 class BookingSchemaUpdate(BaseModel):
-    user_id: Optional[int] = None
-    email: Optional[str] = None
     birthday: Optional[date] = None
-    tour_id: Optional[int] = None
-    status: Optional[int] = None
+    tour_name: Optional[str] = None
+    status: Optional[str] = None
     number_of_people: Optional[int] = Field(default=None, gt=0, description='Количество человек должно быть больше нуля.')
 
 class BookingSchema(BaseModel):
@@ -95,6 +91,10 @@ async def create_user(email: str, password: str, full_name: str, number_phone: s
                 number_phone=number_phone,
             )
         return {'message': 'Вы успешно зарегистрировались!'}
+    
+    except HTTPException as http_exc:
+        raise http_exc
+    
     except Exception as e:
         raise HTTPException(500, f'Произошла ошибка при регистрации: {e}')
             
@@ -135,8 +135,8 @@ async def auth_user(data: AuthRequest):
                 'token': token,
                 'token_expires_at': expires_at.isoformat()
                 }
-    except HTTPException:
-        raise
+    except HTTPException as http_exc:
+        raise http_exc
     
     except Exception as e:
         raise HTTPException(500, f'Произошла ошибка при авторизации: {e}')
@@ -216,6 +216,10 @@ async def create_tour(data: TourSchema):
     try:
         Tours.create(name=name, description=description, price=price, days=days, country=country)
         return {'message': 'Тур успешно создан.'}
+    
+    except HTTPException as http_exc:
+        raise http_exc
+    
     except Exception as e:
         raise HTTPException(500, f'Ошибка при создании тура: {e}')
 
@@ -244,6 +248,10 @@ async def get_tour_by_id(tour_id: int):
             'Длительность': tour.days,
             'Страна': tour.country
         }
+        
+    except HTTPException as http_exc:
+        raise http_exc
+    
     except Exception as e:
         raise HTTPException(500, f'Ошибка при получении тура: {e}')
 
@@ -266,6 +274,10 @@ async def update_tour(tour_id: int, data: TourSchemaUpdate):
         
         tour.save()
         return {'message': 'Информация о туре успешно изменена.'}
+    
+    except HTTPException as http_exc:
+        raise http_exc
+
     except Exception as e:
         raise HTTPException(500, f'Ошибка при обновлении данных о туре: {e}.')
 
@@ -278,6 +290,10 @@ async def delete_tour_by_id(tour_id: int):
     try:
         tour.delete_instance()
         return {'message': 'Тур успешно удален.'}
+    
+    except HTTPException as http_exc:
+        raise http_exc
+    
     except Exception as e:
         raise HTTPException(500, f'Ошибка, тур не был удален: {e}')
 
@@ -287,6 +303,10 @@ async def add_status_booking(data: StatusBookingSchema):
     try:
         StatusBooking.create(status_name=status)
         return {'message': 'Статус успешно создан.'}
+    
+    except HTTPException as http_exc:
+        raise http_exc
+    
     except Exception as e:
         raise HTTPException(500, f'Ошибка при создании статуса: {e}')
     
@@ -306,6 +326,10 @@ async def edit_status_booking(status_id: int, data: StatusBookingSchema):
         status.status_name = data.status_name
         status.save()
         return {'message': 'Статус успешно изменен.'}
+    
+    except HTTPException as http_exc:
+        raise http_exc
+    
     except Exception as e:
         raise HTTPException(500, f'Ошибка при внесении изменений: {e}')
 
@@ -319,11 +343,12 @@ async def get_status_by_id(status_id: int):
     }
 
 @app.post('/booking/create_booking/', tags=['Bookings'])
-def create_booking(data: BookingSchemaCreate):
+def create_booking(data: BookingSchemaCreate, token: str = Header(...)):
+    
     try:
-        user = Users.get_or_none((Users.full_name==data.full_name) & (Users.email==data.email))
+        user = get_user_by_token(token)
         if not user:
-            raise HTTPException(404, 'Пользователеь не найден.')
+            raise HTTPException(401, 'Недействительный токен.')
         
         age = datetime.now().date() - data.birthday
         if age < timedelta(days = 365 * 18):
@@ -337,15 +362,117 @@ def create_booking(data: BookingSchemaCreate):
         if not status_booking:
             raise HTTPException(404, 'Статус не найден.')
         
+        booking_number = uuid.uuid4().hex[:8].upper()
+        
         booking = Bookings.create(
             user_id=user.id,
-            email=data.email,
+            email=user.email,
             birthday=data.birthday,
             tour_id=tour.id,
             booking_date=datetime.now(),
             status=status_booking.id,
-            number_of_people=data.number_of_people
+            number_of_people=data.number_of_people,
+            booking_number=booking_number
         )
-        return {'message': 'Бронирование тура прошло успешно.'}
+        return {'message': 'Бронирование тура прошло успешно.',
+                'Номер заявки': booking_number
+                }
+        
+    except HTTPException as http_exc:
+        raise http_exc
+    
     except Exception as e:
         raise HTTPException(500, f'Произошла ошибка: {e}')
+    
+@app.put('/booking/update_booking/', tags=['Bookings'])
+async def update_booking(booking_number: str, data: BookingSchemaUpdate, token: str = Header(...)):
+    try:
+        user = get_user_by_token(token)
+        if not user:
+            raise HTTPException(401, 'Недействительный токен.')
+        
+        booking = Bookings.select().where(Bookings.booking_number==booking_number).first()
+        if not booking:
+            raise HTTPException(404, 'Бронирование не найдено.')
+        
+        if booking.user_id.id != user.id:
+            raise HTTPException(403, 'Нет прав на изменение этого бронирования.')
+
+        if data is not None:
+            if data.birthday is not None:
+                age = datetime.now().date() - data.birthday
+                if age < timedelta(days=365 * 18):
+                    raise HTTPException(403, 'Пользователю должно быть больше 18 лет.')
+                booking.birthday = data.birthday
+
+            if data.tour_name is not None:
+                tour = Tours.select().where(Tours.name == data.tour_name).first()
+                if not tour:
+                    raise HTTPException(404, 'Указанный тур не найден.')
+                booking.tour_id = tour.id
+
+            if data.status is not None:
+                status_booking = StatusBooking.select().where(StatusBooking.status_name == data.status).first()
+                if not status_booking:
+                    raise HTTPException(404, 'Статус не найден.')
+                booking.status = status_booking.id
+
+            if data.number_of_people is not None:
+                if data.number_of_people <= 0:
+                    raise HTTPException(400, 'Количество человек должно быть больше нуля.')
+                booking.number_of_people = data.number_of_people
+
+            booking.save()
+
+        return {'message': 'Бронирование успешно обновлено.'}
+
+    except HTTPException as http_exc:
+        raise http_exc
+
+    except Exception as e:
+        raise HTTPException(500, f'Произошла ошибка: {e}')
+    
+@app.delete('/booking/delete_booking/', tags=['Bookings'])
+async def delete_booking(booking_number: str, token: str = Header(...)):
+    try:
+        user = get_user_by_token(token)
+        if not user:
+            raise HTTPException(401, 'Недействительный токен.')
+
+        booking = Bookings.select().where(Bookings.booking_number == booking_number).first()
+        if not booking:
+            raise HTTPException(404, 'Бронирование не найдено.')
+
+        if booking.user_id.id != user.id:
+            raise HTTPException(403, 'Нет прав на удаление этого бронирования.')
+
+        booking.delete_instance()
+        
+        return {'message': 'Бронирование успешно удалено.'}
+        
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        raise HTTPException(500, f'Произошла ошибка при удалении: {e}')
+
+@app.get('/booking/all_bookings/', tags=['Bookings'])
+async def get_all_bookings(token: str = Header(...)):
+    try:
+        user = get_user_by_token(token)
+        if not user:
+            raise HTTPException(401, 'Недействительный токен.')
+        
+        bookings = Bookings.select()
+        return [{
+            'Номер заявки:': b.booking_number,
+            'e-mail:': b.email,
+            'Название тура:': b.tour_id.name,
+            'Дата бронирования:': b.booking_date,
+            'Статус:': b.status.status_name,
+            'Количество человек:': b.number_of_people
+            } for b in bookings]
+        
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при получении списка бронирований: {e}')
