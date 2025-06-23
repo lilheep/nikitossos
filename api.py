@@ -72,6 +72,25 @@ class BookingSchema(BaseModel):
     status: Optional[str]
     number_of_people: int
     
+class PaymentMethodCreateSchema(BaseModel):
+    method_name: str
+
+class PaymentMethodUpdateSchema(BaseModel):
+    method_name: str
+    new_name_method: str
+    
+class PaymentMethodDeleteSchema(BaseModel):
+    method_name: str
+    
+class PaymentStatusCreateSchema(BaseModel):
+    status_payment: str
+
+class PaymentStatusUpdateSchema(BaseModel):
+    old_status_name: str
+    new_status_name: str
+
+class PaymentStatusDeleteSchema(BaseModel):
+    status_name: str
     
 @app.post('/users/register/', tags=['Users'])
 async def create_user(email: str, password: str, full_name: str, number_phone: str): 
@@ -187,7 +206,7 @@ async def confirm_password_change(email: str, code: str, new_password: str):
 
 @app.delete('/users/delete_profile/', tags=['Users'])
 async def delete_profile(token: str = Form(...)):
-    user = Users.select().where(Users.token == token).first()
+    user = get_user_by_token(token)
     if not user:
         raise HTTPException(401, 'Пользователь не найден.')
     user.delete_instance()
@@ -195,7 +214,7 @@ async def delete_profile(token: str = Form(...)):
 
 @app.get('/users/me/', tags=['Users'])
 async def get_profile(token: str):
-    user = Users.select().where(Users.token == token).first()
+    user = get_user_by_token(token)
     if not user:
         raise HTTPException(401, 'Пользователь не найден.')
     return {
@@ -206,7 +225,11 @@ async def get_profile(token: str):
     }
 
 @app.post('/tours/create/', tags=['Tours'])
-async def create_tour(data: TourSchema):
+async def create_tour(data: TourSchema, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
     name = data.name
     description = data.description
     price = data.price
@@ -224,7 +247,11 @@ async def create_tour(data: TourSchema):
         raise HTTPException(500, f'Ошибка при создании тура: {e}')
 
 @app.get('/tours/get_tours/', tags=['Tours'])
-async def get_all_tours():
+async def get_all_tours(token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+        
     tours = Tours.select()
     return [{
         'Название тура:': t.name,
@@ -236,7 +263,11 @@ async def get_all_tours():
     ]
     
 @app.get('/tours/get_tour_id', tags=['Tours'])
-async def get_tour_by_id(tour_id: int):
+async def get_tour_by_id(tour_id: int, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+        
     tour = Tours.select().where(Tours.id==tour_id).first()
     if not tour:
         raise HTTPException(404, 'Указанный тур не найден.')
@@ -256,7 +287,11 @@ async def get_tour_by_id(tour_id: int):
         raise HTTPException(500, f'Ошибка при получении тура: {e}')
 
 @app.patch('/tours/update/', tags=['Tours'])
-async def update_tour(tour_id: int, data: TourSchemaUpdate):
+async def update_tour(tour_id: int, data: TourSchemaUpdate, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+        
     tour = Tours.select().where(Tours.id==tour_id).first()
     if not tour:
         raise HTTPException(404, 'Указанный тур не найден.')
@@ -282,7 +317,11 @@ async def update_tour(tour_id: int, data: TourSchemaUpdate):
         raise HTTPException(500, f'Ошибка при обновлении данных о туре: {e}.')
 
 @app.delete('/tours/delete_tour/', tags=['Tours'])
-async def delete_tour_by_id(tour_id: int):
+async def delete_tour_by_id(tour_id: int, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+        
     tour = Tours.select().where(Tours.id==tour_id).first()
     if not tour:
         raise HTTPException(404, 'Указанный тур не найден.')
@@ -298,7 +337,11 @@ async def delete_tour_by_id(tour_id: int):
         raise HTTPException(500, f'Ошибка, тур не был удален: {e}')
 
 @app.post('/statusbooking/add_status', tags=['StatusBooking'])
-async def add_status_booking(data: StatusBookingSchema):
+async def add_status_booking(data: StatusBookingSchema, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+        
     status = data.status_name
     try:
         StatusBooking.create(status_name=status)
@@ -311,14 +354,22 @@ async def add_status_booking(data: StatusBookingSchema):
         raise HTTPException(500, f'Ошибка при создании статуса: {e}')
     
 @app.get('/statusbooking/get_all/', tags=['StatusBooking'])
-async def get_all_status_booking():
+async def get_all_status_booking(token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+        
     status = StatusBooking.select()
     return [{
         'Статус': s.status_name
     } for s in status]
 
 @app.put('/statusbooking/edit_status/', tags=['StatusBooking'])
-async def edit_status_booking(status_id: int, data: StatusBookingSchema):
+async def edit_status_booking(status_id: int, data: StatusBookingSchema, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+        
     status = StatusBooking.select().where(StatusBooking.id==status_id).first()
     if not status:
         raise HTTPException(404, f'Указанного статуса не существует.')
@@ -334,7 +385,11 @@ async def edit_status_booking(status_id: int, data: StatusBookingSchema):
         raise HTTPException(500, f'Ошибка при внесении изменений: {e}')
 
 @app.get('/statusbooking/get_status_by_id/', tags=['StatusBooking'])
-async def get_status_by_id(status_id: int):
+async def get_status_by_id(status_id: int, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+        
     status = StatusBooking.select().where(StatusBooking.id==status_id).first()
     if not status:
         raise HTTPException(404, f'Указанного статуса не существует.')
@@ -344,7 +399,6 @@ async def get_status_by_id(status_id: int):
 
 @app.post('/booking/create_booking/', tags=['Bookings'])
 def create_booking(data: BookingSchemaCreate, token: str = Header(...)):
-    
     try:
         user = get_user_by_token(token)
         if not user:
@@ -500,3 +554,156 @@ def get_booking_by_user(email: str, token: str = Header(...)):
     
     except Exception as e:
         raise HTTPException(500, f'Ошибка при получении списка бронирований: {e}')
+    
+@app.post('/payment_methods/create_method/', tags=['Payment Methods'])
+async def create_payment_method(data: PaymentMethodCreateSchema, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    try:
+        existing_method = PaymentsMethods.get_or_none(PaymentsMethods.method_name == data.method_name)
+        if existing_method:
+            raise HTTPException(400, 'Такой способ оплаты уже существует.')
+            
+        method = PaymentsMethods.create(method_name=data.method_name)
+        return {'message': 'Способ оплаты успешно создан.'}
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при создании способа оплаты: {e}')
+
+@app.get('/payment_methods/get_all_methods/', tags=['Payment Methods'])
+async def get_all_payment_methods(token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    try:
+        methods = PaymentsMethods.select()
+        return [{
+            'ID:': method.id,
+            'Название метода:': method.method_name
+        } for method in methods]
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при получении способов оплаты: {e}')
+
+@app.put('/payment_methods/edit_method/', tags=['Payment Methods'])
+async def update_payment_method(data: PaymentMethodUpdateSchema, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    try:
+        method = PaymentsMethods.get_or_none(PaymentsMethods.method_name==data.method_name)
+        if not method:
+            raise HTTPException(404, 'Способ оплаты не найден.')
+
+        existing_method = PaymentsMethods.get_or_none(PaymentsMethods.method_name == data.new_name_method)
+        if existing_method:
+            raise HTTPException(400, 'Способ оплаты с таким названием уже существует.')
+        
+        method.method_name = data.new_name_method
+        method.save()
+        
+        return {
+            'message': 'Способ оплаты успешно обновлен.',
+            'Название метода': method.method_name
+        }
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при обновлении способа оплаты: {e}')
+
+@app.delete('/payment_methods/delete_method/', tags=['Payment Methods'])
+async def delete_payment_method(data: PaymentMethodDeleteSchema, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    try:
+        method = PaymentsMethods.get_or_none(PaymentsMethods.method_name == data.method_name)
+        if not method:
+            raise HTTPException(404, 'Способ оплаты не найден.')
+        
+        method.delete_instance()
+        return {'message': 'Способ оплаты успешно удален.'}
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при удалении способа оплаты: {e}')
+    
+@app.post('/payment_status/create_status/', tags=['Payment Status'])
+async def create_payment_status(data: PaymentStatusCreateSchema, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    try:
+        existing_status = PaymentStatus.get_or_none(PaymentStatus.status_payment == data.status_payment)
+        if existing_status:
+            raise HTTPException(400, 'Такой статус оплаты уже существует.')
+            
+        status = PaymentStatus.create(status_payment=data.status_payment)
+        return {'message': 'Статус оплаты успешно создан.'}
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при создании статуса оплаты: {e}')
+
+@app.get('/payment_status/get_all_statuses/', tags=['Payment Status'])
+async def get_all_payment_statuses(token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    try:
+        statuses = PaymentStatus.select()
+        return [{
+            'ID': status.id,
+            'Статус оплаты': status.status_payment
+        } for status in statuses]
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при получении статусов оплаты: {e}')
+
+@app.put('/payment_status/edit_status/', tags=['Payment Status'])
+async def update_payment_status(data: PaymentStatusUpdateSchema, token: str = Header(...)):
+    """Обновление статуса оплаты"""
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    try:
+        status = PaymentStatus.get_or_none(PaymentStatus.status_payment == data.old_status_name)
+        if not status:
+            raise HTTPException(404, 'Статус оплаты не найден.')
+
+        existing_status = PaymentStatus.get_or_none(PaymentStatus.status_payment == data.new_status_name)
+        if existing_status:
+            raise HTTPException(400, 'Статус оплаты с таким названием уже существует.')
+
+        status.status_payment = data.new_status_name
+        status.save()
+        
+        return {'message': 'Статус оплаты успешно обновлен.',}
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при обновлении статуса оплаты: {e}')
+
+@app.delete('/payment_status/delete_status/', tags=['Payment Status'])
+async def delete_payment_status(data: PaymentStatusDeleteSchema, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    try:
+        status = PaymentStatus.get_or_none(PaymentStatus.status_payment == data.status_name)
+        if not status:
+            raise HTTPException(404, 'Статус оплаты не найден.')
+        
+        status.delete_instance()
+        return {'message': 'Статус оплаты успешно удален.'}
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при удалении статуса оплаты: {e}')
