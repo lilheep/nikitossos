@@ -476,3 +476,27 @@ async def get_all_bookings(token: str = Header(...)):
         raise http_exc
     except Exception as e:
         raise HTTPException(500, f'Ошибка при получении списка бронирований: {e}')
+
+@app.get('/booking/get_booking_by_user/', tags=['Bookings'])
+def get_booking_by_user(email: str, token: str = Header(...)):
+    try:
+        user = get_user_by_token(token)
+        if not user:
+            raise HTTPException(401, 'Недействительный токен.')
+        b = Bookings.get_or_none(Bookings.email==email)
+        if not b:
+            raise HTTPException(404, 'Для данного пользователя нет заявок на бронирование.')
+        
+        return [{
+            'Номер заявки:': b.booking_number,
+            'Название тура:': b.tour_id.name,
+            'Дата бронирования:': b.booking_date,
+            'Статус:': b.status.status_name,
+            'Количество человек:': b.number_of_people
+        }]
+    
+    except HTTPException as http_exc:
+        raise http_exc
+    
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при получении списка бронирований: {e}')

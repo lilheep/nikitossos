@@ -4,3 +4,4 @@ fastapi
 uvicorn
 smtplib
 uuid
+python-dotenv
