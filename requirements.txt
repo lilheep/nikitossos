@@ -5,3 +5,5 @@ uvicorn
 smtplib
 uuid
 python-dotenv
+psycopg2
+python-multipart

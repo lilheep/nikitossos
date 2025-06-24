@@ -99,9 +99,36 @@ class PaymentsCreate(BaseModel):
     payment_status_name: str
 
 class PaymentsUpdate(BaseModel):
-    booking_number: str
-    amount: int
-    payment_status_name: str
+    payment_id: int
+    booking_number: Optional[str] | None = None
+    amount: Optional[int] | None = None
+    payment_status_name: Optional[str] | None = None
+
+class DestinationCreateSchema(BaseModel):
+    name: str
+    country: str
+    description: Optional[str] = None
+
+class DestinationUpdateSchema(BaseModel):
+    name: Optional[str] = None
+    country: Optional[str] = None
+    description: Optional[str] = None
+
+class TourDestinationCreateSchema(BaseModel):
+    tour_name: str
+    destination_id: int
+
+class TourDestinationResponseSchema(BaseModel):
+    id: int
+    tour_name: str
+    city: str
+    country: str
+
+class TourDestinationUpdateSchema(BaseModel):
+    old_tour_name: str
+    old_destination_id: int
+    new_tour_name: Optional[str] = None
+    new_destination_id: Optional[int] = None
     
 @app.post('/users/register/', tags=['Users'])
 async def create_user(email: str, password: str, full_name: str, number_phone: str): 
@@ -737,12 +764,14 @@ async def create_payment(data: PaymentsCreate, token: str = Header(...)):
 
         payments = Payments.create(
             booking_id=booking.booking_id,
+            payment_date=datetime.now(),
             amount=data.amount,
             method=method.id,
             payment_status=status.id         
         )
         
-        return {'message': 'Платеж успешно добавлен.'}
+        return {'message': 'Платеж успешно добавлен.',
+                'ID платежа': payments.id}
     
     except HTTPException as http_exc:
         raise http_exc
@@ -750,4 +779,380 @@ async def create_payment(data: PaymentsCreate, token: str = Header(...)):
     except Exception as e:
         raise HTTPException(500, f'Произошла ошибка при создании платежа: {e}')
 
-@app.put('/payments/edit_payment/', tags=['Payments'])    
+@app.patch('/payments/edit_payment/', tags=['Payments'])
+async def edit_payment(data: PaymentsUpdate, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    try:
+        payment = Payments.select().where(Payments.id==data.payment_id).first()
+    
+        if not payment:
+            raise HTTPException(404, 'Платеж с указанным ID не найден.')
+        if data.booking_number is not None:
+            booking = Bookings.get_or_none(Bookings.booking_number==data.booking_number)
+            if not booking:
+                raise HTTPException(404, 'Бронирования с таким номером не найдено.')
+            payment.booking_id = booking.booking_id
+        if data.amount is not None:
+            if data.amount <= 0:
+                raise HTTPException(400, 'Сумма платежа должна быть положительной.')
+            payment.amount = data.amount
+        if data.payment_status_name is not None:
+            status = PaymentStatus.get_or_none(PaymentStatus.status_payment == data.payment_status_name)
+            if not status:
+                raise HTTPException(404, 'Указанный статус платежа не найден.')
+            payment.payment_status = status.id
+            
+        payment.save()
+        
+        return {'message': 'Платеж успешно обновлен.'}
+    
+    except HTTPException as http_exc:
+        raise http_exc
+    
+    except Exception as e:
+        raise HTTPException(500, f'Произошла ошибка при обновлении платежа: {e}')
+
+@app.get('/payments/get_payment_by_id/', tags=['Payments'])
+async def get_payment_by_id(payment_id: int, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    try:
+        payment = Payments.get_or_none(Payments.id == payment_id)
+        if not payment:
+            raise HTTPException(404, 'Платеж с указанным ID не найден.')
+
+        booking = Bookings.get_or_none(Bookings.booking_id == payment.booking_id)
+        method = PaymentsMethods.get_or_none(PaymentsMethods.id == payment.method)
+        status = PaymentStatus.get_or_none(PaymentStatus.id == payment.payment_status)
+        
+        return {
+            'id': payment.id,
+            'Номер бронирования': booking.booking_number if booking else None,
+            'Сумма': payment.amount,
+            'Дата': payment.payment_date,
+            'Метод оплаты': method.method_name if method else None,
+            'Статус оплаты': status.status_payment if status else None
+        }
+        
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при получении платежа: {e}')
+
+
+@app.get('/payments/get_all_payments/', tags=['Payments'])
+async def get_all_payments(token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    try:
+        payments = Payments.select()
+
+        for payment in payments:
+            booking = Bookings.get_or_none(Bookings.booking_id == payment.booking_id)
+            method = PaymentsMethods.get_or_none(PaymentsMethods.id == payment.method)
+            status = PaymentStatus.get_or_none(PaymentStatus.id == payment.payment_status)
+            
+            return [{
+                'id': payment.id,
+                'Номер бронирования': booking.booking_number if booking else None,
+                'Сумма': payment.amount,
+                'Дата': payment.payment_date,
+                'Метод оплаты': method.method_name if method else None,
+                'Статус оплаты': status.status_payment if status else None
+            }]
+        
+    
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при получении списка платежей: {e}')
+
+@app.delete('/payments/delete_payment/', tags=['Payments'])
+async def delete_payment(payment_id: int, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    try:
+        payment = Payments.get_or_none(Payments.id == payment_id)
+        if not payment:
+            raise HTTPException(404, 'Платеж с указанным ID не найден.')
+        
+        payment.delete_instance()
+        
+        return {'message': 'Платеж успешно удален.'}
+        
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при удалении платежа: {e}')
+    
+@app.post('/destinations/create_destination/', tags=['Destinations'])
+async def create_destination(data: DestinationCreateSchema, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    try:
+        Destinations.create(
+            name=data.name,
+            country=data.country,
+            description=data.description
+        )
+        return {'message': 'Направление успешно создано.'}
+    
+    except HTTPException as http_exc:
+        raise http_exc
+    
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при создании направления: {e}')
+            
+@app.get('/destinations/get_all/', tags=['Destinations'])
+async def get_all_destinations(token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    try:
+        destinations = Destinations.select()
+        return [{
+            'id': d.id,
+            'Город': d.name,
+            'Страна': d.country,
+            'Описание': d.description
+        } for d in destinations]
+        
+    except HTTPException as http_exc:
+        raise http_exc
+    
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при получении направлений: {e}')
+    
+@app.patch('/destinations/update_destination/', tags=['Destinations'])
+async def update_destination(destination_id: int, data: DestinationUpdateSchema, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    try:
+        destination = Destinations.get_or_none(Destinations.id == destination_id)
+        if not destination:
+            raise HTTPException(404, 'Направление не найдено.')
+
+        if data.name is not None:
+            destination.name = data.name
+        if data.country is not None:
+            destination.country = data.country
+        if data.description is not None:
+            destination.description = data.description
+
+        destination.save()
+        return {'message': 'Направление успешно обновлено.'}
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при обновлении направления: {e}')
+
+@app.delete('/destinations/delete_destination/', tags=['Destinations'])
+async def delete_destination(destination_id: int, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    try:
+        destination = Destinations.get_or_none(Destinations.id == destination_id)
+        if not destination:
+            raise HTTPException(404, 'Направление не найдено.')
+        
+        destination.delete_instance()
+        
+        return {'message': 'Направление успешно удалено.'}
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при удалении направления: {e}')
+
+@app.get('/destinations/search/', tags=['Destinations'])
+async def search_destinations(country: Optional[str] = None, city: Optional[str] = None, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    try:
+        query = Destinations.select()
+        if country:
+            query = query.where(Destinations.country.ilike(f"%{country}%"))
+        if city:
+            query = query.where(Destinations.name.ilike(f"%{city}%"))
+        destinations = list(query)
+        if not destinations:
+            raise HTTPException(404, 'Направления по заданным критериям не найдены.')
+        
+        return [{
+            'Город': d.name,
+            'Страна': d.country,
+            'Описание': d.description
+        } for d in destinations]
+    
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при поиске направлений: {e}')
+
+@app.post('/tour-destinations/create/', tags=['Tour Destinations'])
+async def create_tour_destination(data: TourDestinationCreateSchema, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    try:
+
+        tour = Tours.get_or_none(Tours.name == data.tour_name)
+        if not tour:
+            raise HTTPException(404, 'Тур с указанным названием не найден.')
+
+        destination = Destinations.get_or_none(Destinations.id == data.destination_id)
+        if not destination:
+            raise HTTPException(404, 'Указанное направление не найдено.')
+
+        existing_link = TourDestinations.get_or_none(
+            (TourDestinations.tour_id == tour.id) & 
+            (TourDestinations.destinations_id == destination.id)
+        )
+        if existing_link:
+            raise HTTPException(400, 'Такая связь тур-направление уже существует.')
+
+        TourDestinations.create(
+            tour_id=tour.id,
+            destinations_id=destination.id
+        )
+
+        return {'message': 'Связь тур-направление успешно создана.'}
+    
+    except HTTPException as http_exc:
+        raise http_exc
+    
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при создании связи: {e}')
+
+@app.get('/tour-destinations/all/', tags=['Tour Destinations'])
+async def get_all_tour_destinations(token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    try:
+        tour_destinations = TourDestinations.select()
+        for td in tour_destinations:
+            tour = Tours.get_by_id(td.tour_id)
+            destination = Destinations.get_by_id(td.destinations_id)
+            return [{
+                'id': td.id,
+                'Название тура': tour.name,
+                'Город': destination.name,
+                'Страна': destination.country
+            }]
+    
+    except HTTPException as http_exc:
+        raise http_exc
+        
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при получении данных: {e}')
+    
+@app.get('/tour-destinations/get_by_tour/', tags=['Tour Destinations'])
+async def get_destinations_by_tour(tour_name: str, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    try:
+        tour = Tours.get_or_none(Tours.name == tour_name)
+        if not tour:
+            raise HTTPException(404, 'Тур с таким названием не найден.')
+
+        query = (TourDestinations.select().where(TourDestinations.tour_id == tour.id))
+        
+        result = []
+        for td in query:
+            destination = Destinations.get_by_id(td.destinations_id)
+            
+            result.append({
+                'id': td.id,
+                'Название тура': tour.name,
+                'Город': destination.name,
+                'Страна': destination.country,
+                'Описание': destination.description
+            })
+        
+        if not result:
+            return {"message": "Для этого тура не найдено направлений"}
+        
+        return result
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при получении данных: {e}')
+
+@app.put('/tour-destinations/update/', tags=['Tour Destinations'])
+async def update_tour_destination(data: TourDestinationUpdateSchema, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    try:
+        old_tour = Tours.get_or_none(Tours.name == data.old_tour_name)
+        if not old_tour:
+            raise HTTPException(404, 'Тур с указанным названием не найден.')
+
+        old_destination = Destinations.get_or_none(Destinations.id == data.old_destination_id)
+        if not old_destination:
+            raise HTTPException(404, 'Направление с указанным ID не найдено.')
+
+        link = TourDestinations.get_or_none(
+            (TourDestinations.tour_id == old_tour.id) & 
+            (TourDestinations.destinations_id == old_destination.id)
+        )
+        if not link:
+            raise HTTPException(404, 'Указанная связь тур-направление не найдена.')
+
+        if data.new_tour_name:
+            new_tour = Tours.get_or_none(Tours.name == data.new_tour_name)
+            if not new_tour:
+                raise HTTPException(404, 'Указанного тура не существует.')
+            link.tour_id = new_tour.id
+
+        if data.new_destination_id:
+            new_destination = Destinations.get_or_none(Destinations.id == data.new_destination_id)
+            if not new_destination:
+                raise HTTPException(404, 'Указанного города не существует.')
+            link.destinations_id = new_destination.id
+
+        link.save()
+        return {'message': 'Связь тур-направление успешно обновлена.'}
+    
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при обновлении связи: {e}')
+
+@app.delete('/tour-destinations/delete/', tags=['Tour Destinations'])
+async def delete_tour_destination(td_id: int, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    try:
+        link = TourDestinations.get_or_none(TourDestinations.id == td_id)
+        if not link:
+            raise HTTPException(404, 'Связь с указанным ID не найдена.')
+        link.delete_instance()
+        return {'message': 'Связь тур-направление успешно удалена.'}
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при удалении связи: {e}')
+    

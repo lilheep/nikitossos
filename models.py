@@ -74,8 +74,8 @@ class Payments(BaseModel):
 class Destinations(BaseModel):
     """Направления для туров"""
     id = AutoField()
-    name = CharField(max_length=255, null=False)
-    country = CharField(max_length=255, null=False, unique=True)
+    name = CharField(max_length=255, null=False, unique=True)
+    country = CharField(max_length=255, null=False)
     description = CharField(max_length=255, null=True)
 
 class TourDestinations(BaseModel):
