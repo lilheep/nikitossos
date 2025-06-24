@@ -92,6 +92,17 @@ class PaymentStatusUpdateSchema(BaseModel):
 class PaymentStatusDeleteSchema(BaseModel):
     status_name: str
     
+class PaymentsCreate(BaseModel):
+    booking_number: str
+    amount: int
+    method_name: str
+    payment_status_name: str
+
+class PaymentsUpdate(BaseModel):
+    booking_number: str
+    amount: int
+    payment_status_name: str
+    
 @app.post('/users/register/', tags=['Users'])
 async def create_user(email: str, password: str, full_name: str, number_phone: str): 
     if not re.fullmatch(EMAIL_REGEX, email) or not re.fullmatch(PHONE_REGEX, number_phone):
@@ -707,3 +718,36 @@ async def delete_payment_status(data: PaymentStatusDeleteSchema, token: str = He
         raise http_exc
     except Exception as e:
         raise HTTPException(500, f'Ошибка при удалении статуса оплаты: {e}')
+
+@app.post('/payments/add_payment/', tags=['Payments'])
+async def create_payment(data: PaymentsCreate, token: str = Header(...)):
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    try:
+        booking = Bookings.get_or_none(Bookings.booking_number==data.booking_number)
+        if not booking:
+            raise HTTPException(404, 'Бронирования с таким номером не найдено.')
+        method = PaymentsMethods.get_or_none(PaymentsMethods.method_name==data.method_name)
+        if not method:
+            raise HTTPException(404, 'Неверно указан способ оплаты.')
+        status = PaymentStatus.get_or_none(PaymentStatus.status_payment==data.payment_status_name)
+        if not status:
+            raise HTTPException(404, 'Неверно указан статус оплаты.')
+
+        payments = Payments.create(
+            booking_id=booking.booking_id,
+            amount=data.amount,
+            method=method.id,
+            payment_status=status.id         
+        )
+        
+        return {'message': 'Платеж успешно добавлен.'}
+    
+    except HTTPException as http_exc:
+        raise http_exc
+    
+    except Exception as e:
+        raise HTTPException(500, f'Произошла ошибка при создании платежа: {e}')
+
+@app.put('/payments/edit_payment/', tags=['Payments'])    
