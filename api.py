@@ -251,7 +251,7 @@ async def confirm_password_change(email: str, code: str, new_password: str):
     return {'message': 'Пароль успешно обновлен.'}
 
 @app.delete('/users/delete_profile/', tags=['Users'])
-async def delete_profile(token: str = Form(...)):
+async def delete_profile(token: str = Header(...)):
     user = get_user_by_token(token)
     if not user:
         raise HTTPException(401, 'Пользователь не найден.')
