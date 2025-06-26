@@ -15,7 +15,7 @@ class Users(BaseModel):
     number_phone = CharField(max_length=13, null=False, unique=True)
     token = CharField(null=True, unique=True)
     token_expires_at = DateTimeField(null=True)
-    #role = ---
+    role = CharField(max_length=20, default='Пользователь')
     
 class PasswordChangeRequest(BaseModel):
     """"Запросы на смену пароля"""

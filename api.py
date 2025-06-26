@@ -19,12 +19,14 @@ def hash_password(password: str) -> str:
 EMAIL_REGEX = r'^[A-Za-zА-Яа-яЁё0-9._%+-]+@[A-Za-zА-Яа-яЁё-]+\.[A-Za-zА-Яа-яЁё-]{2,10}$'
 PHONE_REGEX = r'^[0-9+()\-#]{10,15}$'
 
-def get_user_by_token(token: str) -> Users:
+def get_user_by_token(token: str, required_role: Optional[str] = None) -> Users:
     user = Users.select().where(Users.token==token).first()
     if not user:
         raise HTTPException(401, 'Неверный или отсутствующий токен.')
     if user.token_expires_at is None or datetime.now() > user.token_expires_at:
         raise HTTPException(401, 'Срок действия токена истек.')
+    if required_role and user.role != required_role:
+        raise HTTPException(403, 'Недостаточно прав для выполнения этого действия.')
 
     user.token_expires_at = datetime.now() + timedelta(hours=1)
     user.save()
@@ -34,6 +36,11 @@ class AuthRequest(BaseModel):
     email: str | None = None
     number_phone: str | None = None
     password: str
+
+class SetRoleRequest(BaseModel):
+    email: Optional[str] = None
+    number_phone: Optional[str] = None
+    new_role: str
     
 class TourSchema(BaseModel):
     name: str
@@ -146,6 +153,7 @@ async def create_user(email: str, password: str, full_name: str, number_phone: s
                 password=hashed_password,
                 full_name=full_name,
                 number_phone=number_phone,
+                role='Пользователь'
             )
         return {'message': 'Вы успешно зарегистрировались!'}
     
@@ -259,12 +267,47 @@ async def get_profile(token: str):
         'id': user.id,
         'email': user.email,
         'full_name': user.full_name,
-        'number_phone': user.number_phone
+        'number_phone': user.number_phone,
+        'role': user.role
     }
+
+
+@app.post('/users/set_role/', tags=['Users'])
+async def set_user_role(data: SetRoleRequest, token: str = Header(...)):
+    current_user = get_user_by_token(token, 'Администратор')
+    try:
+        if not data.email and not data.number_phone:
+            raise HTTPException(400, 'Укажите email или номер телефона.')
+        
+        if data.email:
+            user = Users.select().where(Users.email == data.email).first()
+        elif data.phone:
+            user = Users.select().where(Users.number_phone == data.phone).first()
+        
+        if not user:
+            raise HTTPException(404, 'Пользователь не найден')
+        
+        if data.new_role not in ['Пользователь', 'Администратор']:
+            raise HTTPException(400, 'Недопустимая роль. Допустимые значения: Пользователь, Администратор')
+        
+        user.role = data.new_role
+        user.save()
+        
+        return {
+            'message': 'Роль пользователя успешно изменена',
+            'email': user.email,
+            'Номер телефона': user.number_phone,
+            'Новая роль': data.new_role
+            }
+    except HTTPException as http_exc:
+        raise http_exc
+              
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при изменении роли: {e}')
 
 @app.post('/tours/create/', tags=['Tours'])
 async def create_tour(data: TourSchema, token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
     
@@ -302,7 +345,7 @@ async def get_all_tours(token: str = Header(...)):
     
 @app.get('/tours/get_tour_id', tags=['Tours'])
 async def get_tour_by_id(tour_id: int, token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
         
@@ -326,7 +369,7 @@ async def get_tour_by_id(tour_id: int, token: str = Header(...)):
 
 @app.patch('/tours/update/', tags=['Tours'])
 async def update_tour(tour_id: int, data: TourSchemaUpdate, token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
         
@@ -356,7 +399,7 @@ async def update_tour(tour_id: int, data: TourSchemaUpdate, token: str = Header(
 
 @app.delete('/tours/delete_tour/', tags=['Tours'])
 async def delete_tour_by_id(tour_id: int, token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
         
@@ -376,7 +419,7 @@ async def delete_tour_by_id(tour_id: int, token: str = Header(...)):
 
 @app.post('/statusbooking/add_status', tags=['StatusBooking'])
 async def add_status_booking(data: StatusBookingSchema, token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
         
@@ -393,7 +436,7 @@ async def add_status_booking(data: StatusBookingSchema, token: str = Header(...)
     
 @app.get('/statusbooking/get_all/', tags=['StatusBooking'])
 async def get_all_status_booking(token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
         
@@ -404,7 +447,7 @@ async def get_all_status_booking(token: str = Header(...)):
 
 @app.put('/statusbooking/edit_status/', tags=['StatusBooking'])
 async def edit_status_booking(status_id: int, data: StatusBookingSchema, token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
         
@@ -424,7 +467,7 @@ async def edit_status_booking(status_id: int, data: StatusBookingSchema, token: 
 
 @app.get('/statusbooking/get_status_by_id/', tags=['StatusBooking'])
 async def get_status_by_id(status_id: int, token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
         
@@ -550,7 +593,7 @@ async def delete_booking(booking_number: str, token: str = Header(...)):
 @app.get('/booking/all_bookings/', tags=['Bookings'])
 async def get_all_bookings(token: str = Header(...)):
     try:
-        user = get_user_by_token(token)
+        user = get_user_by_token(token, 'Администратор')
         if not user:
             raise HTTPException(401, 'Недействительный токен.')
         
@@ -595,7 +638,7 @@ def get_booking_by_user(email: str, token: str = Header(...)):
     
 @app.post('/payment_methods/create_method/', tags=['Payment Methods'])
 async def create_payment_method(data: PaymentMethodCreateSchema, token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
     
@@ -613,7 +656,7 @@ async def create_payment_method(data: PaymentMethodCreateSchema, token: str = He
 
 @app.get('/payment_methods/get_all_methods/', tags=['Payment Methods'])
 async def get_all_payment_methods(token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
     
@@ -628,7 +671,7 @@ async def get_all_payment_methods(token: str = Header(...)):
 
 @app.put('/payment_methods/edit_method/', tags=['Payment Methods'])
 async def update_payment_method(data: PaymentMethodUpdateSchema, token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
     
@@ -655,7 +698,7 @@ async def update_payment_method(data: PaymentMethodUpdateSchema, token: str = He
 
 @app.delete('/payment_methods/delete_method/', tags=['Payment Methods'])
 async def delete_payment_method(data: PaymentMethodDeleteSchema, token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
     
@@ -673,7 +716,7 @@ async def delete_payment_method(data: PaymentMethodDeleteSchema, token: str = He
     
 @app.post('/payment_status/create_status/', tags=['Payment Status'])
 async def create_payment_status(data: PaymentStatusCreateSchema, token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
     
@@ -691,7 +734,7 @@ async def create_payment_status(data: PaymentStatusCreateSchema, token: str = He
 
 @app.get('/payment_status/get_all_statuses/', tags=['Payment Status'])
 async def get_all_payment_statuses(token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
     
@@ -706,8 +749,7 @@ async def get_all_payment_statuses(token: str = Header(...)):
 
 @app.put('/payment_status/edit_status/', tags=['Payment Status'])
 async def update_payment_status(data: PaymentStatusUpdateSchema, token: str = Header(...)):
-    """Обновление статуса оплаты"""
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
     
@@ -731,7 +773,7 @@ async def update_payment_status(data: PaymentStatusUpdateSchema, token: str = He
 
 @app.delete('/payment_status/delete_status/', tags=['Payment Status'])
 async def delete_payment_status(data: PaymentStatusDeleteSchema, token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
     try:
@@ -847,7 +889,7 @@ async def get_payment_by_id(payment_id: int, token: str = Header(...)):
 
 @app.get('/payments/get_all_payments/', tags=['Payments'])
 async def get_all_payments(token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
     
@@ -874,7 +916,7 @@ async def get_all_payments(token: str = Header(...)):
 
 @app.delete('/payments/delete_payment/', tags=['Payments'])
 async def delete_payment(payment_id: int, token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
     
@@ -894,7 +936,7 @@ async def delete_payment(payment_id: int, token: str = Header(...)):
     
 @app.post('/destinations/create_destination/', tags=['Destinations'])
 async def create_destination(data: DestinationCreateSchema, token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
     
@@ -935,7 +977,7 @@ async def get_all_destinations(token: str = Header(...)):
     
 @app.patch('/destinations/update_destination/', tags=['Destinations'])
 async def update_destination(destination_id: int, data: DestinationUpdateSchema, token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
     
@@ -960,7 +1002,7 @@ async def update_destination(destination_id: int, data: DestinationUpdateSchema,
 
 @app.delete('/destinations/delete_destination/', tags=['Destinations'])
 async def delete_destination(destination_id: int, token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
     
@@ -1006,7 +1048,7 @@ async def search_destinations(country: Optional[str] = None, city: Optional[str]
 
 @app.post('/tour-destinations/create/', tags=['Tour Destinations'])
 async def create_tour_destination(data: TourDestinationCreateSchema, token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
     
@@ -1100,7 +1142,7 @@ async def get_destinations_by_tour(tour_name: str, token: str = Header(...)):
 
 @app.put('/tour-destinations/update/', tags=['Tour Destinations'])
 async def update_tour_destination(data: TourDestinationUpdateSchema, token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
     
@@ -1142,7 +1184,7 @@ async def update_tour_destination(data: TourDestinationUpdateSchema, token: str 
 
 @app.delete('/tour-destinations/delete/', tags=['Tour Destinations'])
 async def delete_tour_destination(td_id: int, token: str = Header(...)):
-    user = get_user_by_token(token)
+    user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
     try:
