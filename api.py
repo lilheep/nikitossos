@@ -1,7 +1,12 @@
 from fastapi import FastAPI, HTTPException, Request, Query, Header, Depends, Form
-import hashlib
+from fastapi import UploadFile, File
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from database import db_connection
+import hashlib
 import re
+import os
 from models import Users, Tours, StatusBooking, Bookings, PaymentsMethods, PaymentStatus, Payments, Destinations, TourDestinations, PasswordChangeRequest
 from pydantic import BaseModel, EmailStr
 from email_utils import send_email, generation_confirmation_code
@@ -12,6 +17,19 @@ from pydantic import Field
 
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+IMAGE_DIR = os.path.join(BASE_DIR, "data", "images")
+os.makedirs(IMAGE_DIR, exist_ok=True)
+app.mount("/images", StaticFiles(directory=IMAGE_DIR), name="images")
 
 def hash_password(password: str) -> str:
     return hashlib.sha512(password.encode('utf-8')).hexdigest()
@@ -306,19 +324,28 @@ async def set_user_role(data: SetRoleRequest, token: str = Header(...)):
         raise HTTPException(500, f'Ошибка при изменении роли: {e}')
 
 @app.post('/tours/create/', tags=['Tours'])
-async def create_tour(data: TourSchema, token: str = Header(...)):
+async def create_tour(data: TourSchema, token: str = Header(...), image: UploadFile = File(...)):
     user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
     
-    name = data.name
-    description = data.description
-    price = data.price
-    days = data.days
-    country = data.country
-    
     try:
-        Tours.create(name=name, description=description, price=price, days=days, country=country)
+        file_ext = os.path.splitext(image.filename)[1]
+        filename = f"{uuid.uuid4().hex}{file_ext}"
+        file_path = os.path.join(IMAGE_DIR, filename)
+        
+        with open(file_path, "wb") as buffer:
+            content = await image.read()
+            buffer.write(content)
+            
+        Tours.create(
+            name=data.name,
+            description=data.description,
+            price=data.price,
+            days=data.days,
+            country=data.country,
+            image_filename=filename
+        )
         return {'message': 'Тур успешно создан.'}
     
     except HTTPException as http_exc:
@@ -335,13 +362,14 @@ async def get_all_tours(token: str = Header(...)):
         
     tours = Tours.select()
     return [{
-        'Название тура:': t.name,
-        'Описание:': t.description,
-        'Цена': t.price,
-        'Длительность': t.days,
-        'Страна': t.country
-    } for t in tours
-    ]
+        'id': t.id,
+        'name': t.name,
+        'description': t.description,
+        'price': t.price,
+        'days': t.days,
+        'country': t.country,
+        'image_url': f"/images/{t.image_filename}" if t.image_filename else None
+    } for t in tours]
     
 @app.get('/tours/get_tour_id', tags=['Tours'])
 async def get_tour_by_id(tour_id: int, token: str = Header(...)):
@@ -493,7 +521,7 @@ def create_booking(data: BookingSchemaCreate, token: str = Header(...)):
         if not tour:
             raise HTTPException(404, 'Тур не найден.')
         
-        status_booking = StatusBooking.get_or_none(StatusBooking.status_name==data.status)
+        status_booking = StatusBooking.get_or_none(StatusBooking.status_name=='В обработке')
         if not status_booking:
             raise HTTPException(404, 'Статус не найден.')
         

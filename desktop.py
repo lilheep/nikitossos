@@ -4,6 +4,8 @@ import requests
 from tkinter.font import Font
 import os
 import re
+from PIL import Image, ImageTk
+from io import BytesIO
 
 os.environ['TCL_LIBRARY'] = r"C:\Users\User\AppData\Local\Programs\Python\Python311\tcl\tcl8.6"
 os.environ['TK_LIBRARY'] = r"C:\Users\User\AppData\Local\Programs\Python\Python311\tcl\tk8.6"
@@ -99,29 +101,51 @@ class MainApp:
             fg=self.fg_color
         )
         welcome_label.pack(pady=20)
-        
-        tours_frame = tk.Frame(self.main_frame, bg=self.bg_color)
-        tours_frame.pack(fill="x", pady=20)
-        
-        tk.Label(
-            tours_frame,
+
+        tours_header = tk.Label(
+            self.main_frame,
             text="Доступные туры:",
             font=self.normal_font,
             bg=self.bg_color,
             fg=self.fg_color
-        ).pack(anchor="w")
+        )
+        tours_header.pack(anchor="w", padx=20)
+    
+        container = tk.Frame(self.main_frame, bg=self.bg_color)
+        container.pack(fill="both", expand=True, padx=20, pady=10)
+
+        canvas = tk.Canvas(container, bg=self.bg_color, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+
+        self.tours_frame = tk.Frame(canvas, bg=self.bg_color)
+        self.tours_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        canvas.create_window((0, 0), window=self.tours_frame, anchor="nw", width=canvas.winfo_width())
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        
+        def update_frame_width(event):
+            canvas.itemconfig("all", width=event.width)
+        
+        canvas.bind("<Configure>", update_frame_width)
+        
+        canvas.bind_all("<MouseWheel>", lambda event: canvas.yview_scroll(int(-1*(event.delta/120)), "units"))
         
         try:
             response = requests.get(
                 "http://127.0.0.1:8000/tours/get_tours/",
-                headers={"Authorization": f"Bearer {self.token}"},
+                headers={"token": self.token},
                 timeout=5
             )
             
             if response.status_code == 200:
                 tours = response.json()
                 for tour in tours:
-                    self.create_tour_card(tours_frame, tour)
+                    self.create_tour_card(self.tours_frame, tour)
             else:
                 error = response.json().get("detail", "Неизвестная ошибка")
                 messagebox.showerror("Ошибка", f"Не удалось загрузить туры: {error}")
@@ -138,22 +162,63 @@ class MainApp:
             padx=10,
             pady=10
         )
-        tour_card.pack(fill="x", pady=5)
+        tour_card.pack(fill="x", pady=5, expand=True)
+        
+
+        content_frame = tk.Frame(tour_card, bg=self.card_bg)
+        content_frame.pack(fill="x", expand=True)
+
+        image_frame = tk.Frame(content_frame, bg=self.card_bg)
+        image_frame.pack(side="left", padx=(0, 15))
+        
+        if tour.get('image_url'):
+            try:
+                response = requests.get(f"http://127.0.0.1:8000{tour['image_url']}")
+                if response.status_code == 200:
+                    image_data = BytesIO(response.content)
+                    image = Image.open(image_data)
+                    image = image.resize((200, 150), Image.LANCZOS)
+                    photo = ImageTk.PhotoImage(image)
+                    
+                    image_label = tk.Label(image_frame, image=photo, bg=self.card_bg)
+                    image_label.image = photo
+                    image_label.pack()
+                else:
+                    tk.Label(image_frame, 
+                             text="Изображение не найдено", 
+                             bg=self.card_bg).pack()
+            except Exception as e:
+                tk.Label(image_frame, 
+                         text=f"Ошибка загрузки: {str(e)}", 
+                         bg=self.card_bg).pack()
+        else:
+            tk.Label(image_frame, 
+                     text="Нет изображения", 
+                     bg=self.card_bg).pack()
+        
+        info_frame = tk.Frame(content_frame, bg=self.card_bg)
+        info_frame.pack(side="left", fill="x", expand=True)
         
         fields = [
-            ("Тур", "Название тура:"),
-            ("Цена", "Цена"),
-            ("Длительность", "Длительность")
+            ("Тур", "name"),
+            ("Описание", "description"),
+            ("Цена", "price"),
+            ("Длительность (в днях)", "days"),
+            ("Страна", "country")
         ]
         
         for label, key in fields:
-            tk.Label(
-                tour_card,
-                text=f"{label}: {tour.get(key, 'Не указано')}",
-                font=self.small_font if label != "Тур" else self.normal_font,
-                bg=self.card_bg
-            ).pack(anchor="w")
-            
+            value = tour.get(key)
+            if value:
+                tk.Label(
+                    info_frame,
+                    text=f"{label}: {value}",
+                    font=self.small_font,
+                    bg=self.card_bg,
+                    anchor="w",
+                    justify="left"
+                ).pack(anchor="w", fill="x", pady=2)
+        
         ttk.Button(
             tour_card,
             text="Забронировать",
@@ -162,7 +227,113 @@ class MainApp:
         ).pack(anchor="e", pady=5)
     
     def book_tour(self, tour):
-        messagebox.showinfo("Информация", f"Бронирование тура {tour.get('Название тура:', '')}")
+        booking_window = tk.Toplevel(self.root)
+        booking_window.title(f"Бронирование тура: {tour['name']}")
+        booking_window.geometry("800x500")
+        booking_window.resizable(False, False)
+
+        frame = tk.Frame(booking_window, padx=20, pady=20)
+        frame.pack(fill="both", expand=True)
+
+        tk.Label(
+            frame,
+            text=f"Бронирование тура: {tour['name']}",
+            font=self.title_font
+        ).pack(pady=10)
+
+        tour_info_frame = tk.Frame(frame)
+        tour_info_frame.pack(fill="x", pady=10)
+        
+        tk.Label(
+            tour_info_frame,
+            text="Информация о туре:",
+            font=self.normal_font,
+            justify="left"
+        ).pack(anchor="w")
+        
+        info_text = (
+            f"Страна: {tour['country']}\n"
+            f"Длительность: {tour['days']} дней\n"
+            f"Цена: {tour['price']} руб.\n"
+            f"Описание: {tour['description']}"
+        )
+        
+        tk.Label(
+            tour_info_frame,
+            text=info_text,
+            font=self.small_font,
+            justify="left",
+            anchor="w"
+        ).pack(anchor="w", padx=20)
+    
+        form_frame = tk.Frame(frame)
+        form_frame.pack(fill="x", pady=10)
+
+        tk.Label(
+            form_frame,
+            text="Дата рождения (ГГГГ-ММ-ДД):",
+            font=self.normal_font
+        ).pack(anchor="w", pady=5)
+        
+        birthday_entry = ttk.Entry(form_frame, width=20, font=self.normal_font)
+        birthday_entry.pack(anchor="w", fill="x", pady=5)
+
+        tk.Label(
+            form_frame,
+            text="Количество человек:",
+            font=self.normal_font
+        ).pack(anchor="w", pady=5)
+        
+        people_var = tk.IntVar(value=1)
+        people_spinbox = ttk.Spinbox(
+            form_frame,
+            from_=1,
+            to=10,
+            textvariable=people_var,
+            width=5,
+            font=self.normal_font
+        )
+        people_spinbox.pack(anchor="w", pady=5)
+        
+        def submit_booking():
+            birthday = birthday_entry.get()
+            people = people_var.get()
+            
+            if not birthday or not re.match(r'\d{4}-\d{2}-\d{2}', birthday):
+                messagebox.showerror("Ошибка", "Некорректный формат даты рождения. Используйте ГГГГ-ММ-ДД")
+                return
+            
+            try:
+                response = requests.post(
+                    "http://127.0.0.1:8000/booking/create_booking/",
+                    headers={"token": self.token},
+                    json={
+                        "birthday": birthday,
+                        "tour_name": tour['name'],
+                        "number_of_people": people
+                    }
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    messagebox.showinfo(
+                        "Успех", 
+                        f"Бронирование успешно оформлено!\nНомер заявки: {result.get('Номер заявки', '')}"
+                    )
+                    booking_window.destroy()
+                else:
+                    error = response.json().get("detail", "Неизвестная ошибка")
+                    messagebox.showerror("Ошибка", f"Не удалось оформить бронирование: {error}")
+                    
+            except requests.exceptions.RequestException as e:
+                messagebox.showerror("Ошибка", f"Не удалось подключиться к серверу: {e}")
+        
+        ttk.Button(
+            frame,
+            text="Забронировать",
+            command=submit_booking,
+            style="TButton"
+        ).pack(pady=20)
     
     def create_admin_content(self):
         welcome_label = tk.Label(
@@ -287,13 +458,14 @@ class MainApp:
             messagebox.showerror("Ошибка", f"Не удалось подключиться к серверу: {e}")
     
     def delete_account(self):
+        
         if not messagebox.askyesno("Подтверждение", "Вы уверены, что хотите удалить аккаунт?"):
             return
             
         try:
             response = requests.delete(
                 "http://127.0.0.1:8000/users/delete_profile/",
-                params={"token": self.token},
+                headers={"token": self.token},
                 timeout=5
             )
             
@@ -655,5 +827,3 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = AuthApp(root)
     root.mainloop()
-
-MainApp.delete_account()

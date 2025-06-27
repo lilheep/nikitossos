@@ -9,3 +9,4 @@ psycopg2
 python-multipart
 requests
 json
+pillow
