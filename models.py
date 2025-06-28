@@ -192,7 +192,7 @@ def create_status():
             },
         ]
         for status in status_booking:
-            StatusBooking.create(**status_booking)
+            StatusBooking.create(**status)
     except Exception as e:
         print(f'Ошибка при создании статусов заявок: {e}')
         
@@ -202,7 +202,7 @@ try:
     initialize_tables()
     create_admin()
     create_tours()
-    create_status
+    create_status()
 except Exception as e:
     print(f'Error initializing tables: {e}')
 finally:

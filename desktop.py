@@ -7,9 +7,6 @@ import re
 from PIL import Image, ImageTk
 from io import BytesIO
 
-os.environ['TCL_LIBRARY'] = r"C:\Users\User\AppData\Local\Programs\Python\Python311\tcl\tcl8.6"
-os.environ['TK_LIBRARY'] = r"C:\Users\User\AppData\Local\Programs\Python\Python311\tcl\tk8.6"
-
 class MainApp:
     def __init__(self, root, token):
         self.root = root
@@ -69,14 +66,25 @@ class MainApp:
             fg=self.button_fg
         )
         self.title_label.pack(side="left", padx=20)
+
+        button_frame = tk.Frame(self.top_bar, bg=self.accent_color)
+        button_frame.pack(side="right", padx=20)
+
+        self.bookings_btn = ttk.Button(
+            button_frame,
+            text="Мои заявки",
+            command=self.show_my_bookings,
+            style="TButton"
+        )
+        self.bookings_btn.pack(side="left", padx=10)
         
         self.profile_btn = ttk.Button(
-            self.top_bar,
+            button_frame,
             text="Мой профиль",
             command=self.show_profile,
             style="TButton"
         )
-        self.profile_btn.pack(side="right", padx=20)
+        self.profile_btn.pack(side="left", padx=10)
         
     def create_main_content(self):
         self.main_frame = tk.Frame(self.root, bg=self.bg_color)
@@ -91,7 +99,7 @@ class MainApp:
             self.create_admin_content()
         else:
             self.create_user_content()
-    
+
     def create_user_content(self):
         welcome_label = tk.Label(
             self.main_frame,
@@ -110,7 +118,7 @@ class MainApp:
             fg=self.fg_color
         )
         tours_header.pack(anchor="w", padx=20)
-    
+
         container = tk.Frame(self.main_frame, bg=self.bg_color)
         container.pack(fill="both", expand=True, padx=20, pady=10)
 
@@ -152,7 +160,7 @@ class MainApp:
                 
         except requests.exceptions.RequestException as e:
             messagebox.showerror("Ошибка", f"Ошибка соединения: {e}")
-    
+
     def create_tour_card(self, parent, tour):
         tour_card = tk.Frame(
             parent,
@@ -185,16 +193,16 @@ class MainApp:
                     image_label.pack()
                 else:
                     tk.Label(image_frame, 
-                             text="Изображение не найдено", 
-                             bg=self.card_bg).pack()
+                            text="Изображение не найдено", 
+                            bg=self.card_bg).pack()
             except Exception as e:
                 tk.Label(image_frame, 
-                         text=f"Ошибка загрузки: {str(e)}", 
-                         bg=self.card_bg).pack()
+                        text=f"Ошибка загрузки: {str(e)}", 
+                        bg=self.card_bg).pack()
         else:
             tk.Label(image_frame, 
-                     text="Нет изображения", 
-                     bg=self.card_bg).pack()
+                    text="Нет изображения", 
+                    bg=self.card_bg).pack()
         
         info_frame = tk.Frame(content_frame, bg=self.card_bg)
         info_frame.pack(side="left", fill="x", expand=True)
@@ -225,7 +233,7 @@ class MainApp:
             command=lambda t=tour: self.book_tour(t),
             style="TButton"
         ).pack(anchor="e", pady=5)
-    
+
     def book_tour(self, tour):
         booking_window = tk.Toplevel(self.root)
         booking_window.title(f"Бронирование тура: {tour['name']}")
@@ -265,7 +273,7 @@ class MainApp:
             justify="left",
             anchor="w"
         ).pack(anchor="w", padx=20)
-    
+
         form_frame = tk.Frame(frame)
         form_frame.pack(fill="x", pady=10)
 
@@ -334,7 +342,7 @@ class MainApp:
             command=submit_booking,
             style="TButton"
         ).pack(pady=20)
-    
+
     def create_admin_content(self):
         welcome_label = tk.Label(
             self.main_frame,
@@ -361,7 +369,7 @@ class MainApp:
                 command=command,
                 style="TButton"
             ).pack(side="left", padx=10)
-    
+
     def show_profile(self):
         if not self.load_user_data():
             messagebox.showerror("Ошибка", "Не удалось обновить данные профиля")
@@ -413,7 +421,7 @@ class MainApp:
                 command=command,
                 style="TButton"
             ).pack(side="left", padx=10)
-    
+
     def show_change_password(self):
         change_pass_window = tk.Toplevel(self.root)
         change_pass_window.title("Смена пароля")
@@ -435,7 +443,7 @@ class MainApp:
             command=lambda: self.send_password_code(email_entry.get()),
             style="TButton"
         ).pack(pady=20)
-    
+
     def send_password_code(self, email):
         if not email:
             messagebox.showerror("Ошибка", "Введите email")
@@ -456,7 +464,7 @@ class MainApp:
                 
         except requests.exceptions.RequestException as e:
             messagebox.showerror("Ошибка", f"Не удалось подключиться к серверу: {e}")
-    
+
     def delete_account(self):
         
         if not messagebox.askyesno("Подтверждение", "Вы уверены, что хотите удалить аккаунт?"):
@@ -478,13 +486,243 @@ class MainApp:
                 
         except requests.exceptions.RequestException as e:
             messagebox.showerror("Ошибка", f"Не удалось подключиться к серверу: {e}")
+
+    def show_my_bookings(self):
+        if not self.load_user_data():
+            messagebox.showerror("Ошибка", "Не удалось обновить данные профиля")
+            return
+            
+        email = self.user_data.get('email')
+        if not email:
+            messagebox.showerror("Ошибка", "Email пользователя не найден")
+            return
+            
+        try:
+            response = requests.get(
+                "http://127.0.0.1:8000/booking/get_booking_by_user/",
+                params={"email": email},
+                headers={"token": self.token},
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                bookings = response.json()
+                self.display_bookings(bookings)
+            else:
+                error = response.json().get("detail", "Неизвестная ошибка")
+                messagebox.showerror("Ошибка", f"Не удалось загрузить заявки: {error}")
+                
+        except requests.exceptions.RequestException as e:
+            messagebox.showerror("Ошибка", f"Не удалось подключиться к серверу: {e}")
     
+    def get_selected_booking_number(self):
+        selected_item = self.tree.selection()
+        if not selected_item:
+            messagebox.showwarning("Предупреждение", "Выберите заявку из списка")
+            return None
+            
+        item = self.tree.item(selected_item[0])
+        return item['values'][0]
+
+    def edit_selected_booking(self):
+        selected_item = self.tree.selection()
+        if not selected_item:
+            messagebox.showwarning("Предупреждение", "Выберите заявку из списка")
+            return
+        item = self.tree.item(selected_item[0])
+        booking_number = item['values'][0]
+        self.edit_booking(booking_number)
+
+    def delete_selected_booking(self):
+        booking_number = self.get_selected_booking_number()
+        if booking_number:
+            self.delete_booking(booking_number)
+                
+    def edit_booking(self, booking_number):
+    
+        booking_data = None
+        for booking in self.bookings_data:
+            if booking.get("Номер заявки:") == booking_number:
+                booking_data = booking
+                break
+        
+        if not booking_data:
+            messagebox.showerror("Ошибка", "Данные заявки не найдены")
+            return
+            
+        self.open_edit_window(booking_data)
+
+    def open_edit_window(self, booking_data):
+        edit_window = tk.Toplevel(self.root)
+        edit_window.title(f"Редактирование заявки {booking_data['Номер заявки:']}")
+        edit_window.geometry("500x400")
+        
+        frame = tk.Frame(edit_window, padx=20, pady=20)
+        frame.pack(fill="both", expand=True)
+        tk.Label(frame, text="Дата рождения (ГГГГ-ММ-ДД):", font=self.normal_font).pack(anchor="w", pady=5)
+        birthday_var = tk.StringVar(value=booking_data.get('Дата рождения:', ''))
+        birthday_entry = ttk.Entry(frame, textvariable=birthday_var, width=20, font=self.normal_font)
+        birthday_entry.pack(fill="x", pady=5)
+        tk.Label(frame, text="Количество человек:", font=self.normal_font).pack(anchor="w", pady=5)
+        try:
+            current_people = int(booking_data.get("Количество человек:", 1))
+        except:
+            current_people = 1
+
+        people_var = tk.IntVar(value=current_people)
+        people_spinbox = ttk.Spinbox(
+            frame,
+            from_=1,
+            to=10,
+            textvariable=people_var,
+            width=5,
+            font=self.normal_font
+        )
+        people_spinbox.pack(anchor="w", pady=5)
+
+        def save_changes():
+            birthday = birthday_var.get()
+            if not re.match(r'\d{4}-\d{2}-\d{2}', birthday):
+                messagebox.showerror("Ошибка", "Некорректный формат даты рождения. Используйте ГГГГ-ММ-ДД")
+                return
+
+            try:
+                response = requests.put(
+                    "http://127.0.0.1:8000/booking/update_booking/",
+                    headers={
+                        "token": self.token,
+                        "Content-Type": "application/json"
+                    },
+                    params={"booking_number": booking_data['Номер заявки:']},
+                    json={
+                        "birthday": birthday,
+                        "number_of_people": people_var.get()
+                    }
+                )
+                
+                if response.status_code == 200:
+                    messagebox.showinfo("Успех", "Заявка успешно обновлена!")
+                    edit_window.destroy()
+                    if hasattr(self, 'bookings_window') and self.bookings_window.winfo_exists():
+                        self.bookings_window.destroy()
+                    self.show_my_bookings()
+                else:
+                    try:
+                        error_detail = response.json().get("detail", "Неизвестная ошибка")
+                        messagebox.showerror("Ошибка", f"Не удалось обновить заявку: {error_detail}")
+                    except:
+                        messagebox.showerror("Ошибка", f"Ошибка сервера: {response.status_code} - {response.text}")
+                    
+            except requests.exceptions.RequestException as e:
+                messagebox.showerror("Ошибка", f"Не удалось подключиться к серверу: {e}")
+
+        ttk.Button(
+            frame,
+            text="Сохранить изменения",
+            command=save_changes,
+            style="TButton"
+        ).pack(pady=20)
+
+    def delete_booking(self, booking_number):
+        if not messagebox.askyesno("Подтверждение", "Вы уверены, что хотите удалить эту заявку?"):
+            return
+            
+        try:
+            response = requests.delete(
+                "http://127.0.0.1:8000/booking/delete_booking/",
+                headers={"token": self.token},
+                params={"booking_number": booking_number}
+            )
+            
+            if response.status_code == 200:
+                messagebox.showinfo("Успех", "Заявка успешно удалена!")
+                if hasattr(self, 'bookings_window') and self.bookings_window.winfo_exists():
+                    self.bookings_window.destroy()
+                self.show_my_bookings()
+            else:
+                error = response.json().get("detail", "Неизвестная ошибка")
+                messagebox.showerror("Ошибка", f"Не удалось удалить заявку: {error}")
+                
+        except requests.exceptions.RequestException as e:
+            messagebox.showerror("Ошибка", f"Не удалось подключиться к серверу: {e}")
+
+    def display_bookings(self, bookings):
+        self.bookings_window = tk.Toplevel(self.root)
+        self.bookings_window.title("Мои заявки")
+        self.bookings_window.geometry("900x600")
+        
+        tk.Label(
+            self.bookings_window,
+            text="Мои заявки на бронирование",
+            font=self.title_font,
+            pady=10
+        ).pack(fill="x")
+
+        container = tk.Frame(self.bookings_window)
+        container.pack(fill="both", expand=True, padx=20, pady=10)
+
+        columns = ("Номер заявки", "Тур", "Дата бронирования", "Статус", "Количество человек", "Дата рождения")
+        self.tree = ttk.Treeview(container, columns=columns, show="headings", selectmode="browse")
+        
+        self.tree.column("Номер заявки", width=120, anchor="center")
+        self.tree.column("Тур", width=200, anchor="w")
+        self.tree.column("Дата бронирования", width=150, anchor="center")
+        self.tree.column("Статус", width=150, anchor="center")
+        self.tree.column("Количество человек", width=150, anchor="center")
+        self.tree.column("Дата рождения", width=120, anchor="center")
+
+        for col in columns:
+            self.tree.heading(col, text=col)
+
+        self.bookings_data = []
+        for booking in bookings:
+            self.bookings_data.append(booking)
+            self.tree.insert("", "end", values=(
+                booking.get("Номер заявки:"),
+                booking.get("Название тура:"),
+                booking.get("Дата бронирования:"),
+                booking.get("Статус:"),
+                booking.get("Количество человек:"),
+                booking.get("Дата рождения:")
+                ))
+        scrollbar = ttk.Scrollbar(container, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+
+        self.tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        button_frame = tk.Frame(self.bookings_window)
+        button_frame.pack(pady=10)
+
+        self.edit_btn = ttk.Button(
+            button_frame,
+            text="Редактировать выбранную заявку",
+            command=self.edit_selected_booking,
+            style="TButton"
+        )
+        self.edit_btn.pack(side="left", padx=10)
+        self.delete_btn = ttk.Button(
+            button_frame,
+            text="Удалить выбранную заявку",
+            command=self.delete_selected_booking,
+            style="TButton"
+        )
+        self.delete_btn.pack(side="left", padx=10)
+
+        status_label = tk.Label(
+            self.bookings_window,
+            text=f"Найдено заявок: {len(bookings)}",
+            font=self.small_font,
+            pady=10
+        )
+        status_label.pack(side="bottom")
+        
     def show_tours_management(self):
         messagebox.showinfo("Информация", "Функционал управления турами будет реализован позже")
-    
+
     def show_users_management(self):
         messagebox.showinfo("Информация", "Функционал управления пользователями будет реализован позже")
-    
+
     def show_stats(self):
         messagebox.showinfo("Информация", "Функционал статистики будет реализован позже")
 

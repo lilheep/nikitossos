@@ -2,11 +2,8 @@ peewee
 pymysql
 fastapi
 uvicorn
-smtplib
-uuid
 python-dotenv
 psycopg2
 python-multipart
 requests
-json
 pillow

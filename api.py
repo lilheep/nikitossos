@@ -655,7 +655,8 @@ def get_booking_by_user(email: str, token: str = Header(...)):
             'Название тура:': b.tour_id.name,
             'Дата бронирования:': b.booking_date,
             'Статус:': b.status.status_name,
-            'Количество человек:': b.number_of_people
+            'Количество человек:': b.number_of_people,
+            'Дата рождения:': b.birthday.isoformat()
         }]
     
     except HTTPException as http_exc:
