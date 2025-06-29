@@ -14,22 +14,23 @@ from datetime import datetime, timedelta, date
 import uuid
 from typing import Optional
 from pydantic import Field
+import aiofiles
 
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=['*'],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=['*'],
+    allow_headers=['*'],
 )
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-IMAGE_DIR = os.path.join(BASE_DIR, "data", "images")
+IMAGE_DIR = os.path.join(BASE_DIR, 'data', 'images')
 os.makedirs(IMAGE_DIR, exist_ok=True)
-app.mount("/images", StaticFiles(directory=IMAGE_DIR), name="images")
+app.mount('/images', StaticFiles(directory=IMAGE_DIR), name='images')
 
 def hash_password(password: str) -> str:
     return hashlib.sha512(password.encode('utf-8')).hexdigest()
@@ -61,11 +62,13 @@ class SetRoleRequest(BaseModel):
     new_role: str
     
 class TourSchema(BaseModel):
-    name: str
-    description: str | None = None
-    price: int
-    days: int
-    country: str  
+    name: str = Form(...)
+    description: Optional[str] = Form(None)
+    price: int = Form(...)
+    days: int = Form(...)
+    country: str = Form(...)
+    token: str = Header(...)
+    image: UploadFile = File(...) 
 
 class TourSchemaUpdate(BaseModel):
     name: Optional[str] = None
@@ -119,7 +122,6 @@ class PaymentStatusDeleteSchema(BaseModel):
     
 class PaymentsCreate(BaseModel):
     booking_number: str
-    amount: int
     method_name: str
     payment_status_name: str
 
@@ -322,28 +324,76 @@ async def set_user_role(data: SetRoleRequest, token: str = Header(...)):
               
     except Exception as e:
         raise HTTPException(500, f'Ошибка при изменении роли: {e}')
+    
+@app.get('/users/get_all/', tags=['Users'])
+async def get_all_users(token: str = Header(...)):
+    user = get_user_by_token(token, 'Администратор')
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    users = Users.select()
+    return [{
+        'id': u.id,
+        'email': u.email,
+        'full_name': u.full_name,
+        'number_phone': u.number_phone,
+        'role': u.role
+    } for u in users]
+
+@app.delete('/users/delete_admin_user/', tags=['Users'])
+async def admin_delete_user(user_id: int, token: str = Header(...)):
+    admin = get_user_by_token(token, 'Администратор')
+    if not admin:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+    
+    try:
+        user = Users.get(Users.id == user_id)
+        if user.role == 'Администратор':
+            admins_count = Users.select().where(Users.role == 'Администратор').count()
+            if admins_count == 1:
+                raise HTTPException(400, 'Нельзя удалить последнего администратора.')
+
+        user.delete_instance()
+        return {'message': 'Пользователь успешно удален.'}
+        
+    except Users.DoesNotExist:
+        raise HTTPException(404, 'Пользователь не найден.')
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при удалении пользователя: {e}')
 
 @app.post('/tours/create/', tags=['Tours'])
-async def create_tour(data: TourSchema, token: str = Header(...), image: UploadFile = File(...)):
+async def create_tour(
+    name: str = Form(...),
+    description: Optional[str] = Form(None),
+    price: int = Form(...),
+    days: int = Form(...),
+    country: str = Form(...),
+    token: str = Header(...),
+    image: UploadFile = File(...)
+):
     user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
     
     try:
-        file_ext = os.path.splitext(image.filename)[1]
-        filename = f"{uuid.uuid4().hex}{file_ext}"
-        file_path = os.path.join(IMAGE_DIR, filename)
+        allowed_extensions = ['.jpg', '.jpeg', '.png']
+        file_ext = os.path.splitext(image.filename)[1].lower()
+        if file_ext not in allowed_extensions:
+            raise HTTPException(400, 'Недопустимый формат изображения. Допустимы: jpg, jpeg, png.')
         
-        with open(file_path, "wb") as buffer:
+        filename = f'{uuid.uuid4().hex}{file_ext}'
+        file_path = os.path.join(IMAGE_DIR, filename)
+
+        async with aiofiles.open(file_path, 'wb') as buffer:
             content = await image.read()
-            buffer.write(content)
+            await buffer.write(content)
             
         Tours.create(
-            name=data.name,
-            description=data.description,
-            price=data.price,
-            days=data.days,
-            country=data.country,
+            name=name,
+            description=description,
+            price=price,
+            days=days,
+            country=country,
             image_filename=filename
         )
         return {'message': 'Тур успешно создан.'}
@@ -368,10 +418,10 @@ async def get_all_tours(token: str = Header(...)):
         'price': t.price,
         'days': t.days,
         'country': t.country,
-        'image_url': f"/images/{t.image_filename}" if t.image_filename else None
+        'image_url': f'/images/{t.image_filename}' if t.image_filename else None
     } for t in tours]
     
-@app.get('/tours/get_tour_id', tags=['Tours'])
+@app.get('/tours/get_tour_id/', tags=['Tours'])
 async def get_tour_by_id(tour_id: int, token: str = Header(...)):
     user = get_user_by_token(token, 'Администратор')
     if not user:
@@ -470,6 +520,7 @@ async def get_all_status_booking(token: str = Header(...)):
         
     status = StatusBooking.select()
     return [{
+        'id': s.id,
         'Статус': s.status_name
     } for s in status]
 
@@ -505,6 +556,28 @@ async def get_status_by_id(status_id: int, token: str = Header(...)):
     return {
         'Статус': status.status_name
     }
+    
+@app.delete('/statusbooking/delete_status/', tags=['StatusBooking'])
+async def delete_booking_status(status_id: int, token: str = Header(...)):
+    user = get_user_by_token(token, 'Администратор')
+    if not user:
+        raise HTTPException(401, 'Неверный токен авторизации.')
+        
+    try:
+        status = StatusBooking.get_or_none(StatusBooking.id == status_id)
+        if not status:
+            raise HTTPException(404, 'Статус не найден.')
+        
+        bookings_count = Bookings.select().where(Bookings.status == status_id).count()
+        if bookings_count > 0:
+            raise HTTPException(400, 'Невозможно удалить статус, так как он используется в бронированиях.')
+        
+        status.delete_instance()
+        return {'message': 'Статус успешно удален.'}
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        raise HTTPException(500, f'Ошибка при удалении статуса: {e}')
 
 @app.post('/booking/create_booking/', tags=['Bookings'])
 def create_booking(data: BookingSchemaCreate, token: str = Header(...)):
@@ -521,7 +594,7 @@ def create_booking(data: BookingSchemaCreate, token: str = Header(...)):
         if not tour:
             raise HTTPException(404, 'Тур не найден.')
         
-        status_booking = StatusBooking.get_or_none(StatusBooking.status_name=='В обработке')
+        status_booking = StatusBooking.get_or_none(StatusBooking.status_name=='Ожидает оплаты')
         if not status_booking:
             raise HTTPException(404, 'Статус не найден.')
         
@@ -826,9 +899,17 @@ async def create_payment(data: PaymentsCreate, token: str = Header(...)):
         booking = Bookings.get_or_none(Bookings.booking_number==data.booking_number)
         if not booking:
             raise HTTPException(404, 'Бронирования с таким номером не найдено.')
+
+        tour = Tours.get_or_none(Tours.id == booking.tour_id_id)
+        if not tour:
+            raise HTTPException(404, 'Тур не найден.')
+        
+        amount = tour.price * booking.number_of_people
+        
         method = PaymentsMethods.get_or_none(PaymentsMethods.method_name==data.method_name)
         if not method:
             raise HTTPException(404, 'Неверно указан способ оплаты.')
+        
         status = PaymentStatus.get_or_none(PaymentStatus.status_payment==data.payment_status_name)
         if not status:
             raise HTTPException(404, 'Неверно указан статус оплаты.')
@@ -836,13 +917,26 @@ async def create_payment(data: PaymentsCreate, token: str = Header(...)):
         payments = Payments.create(
             booking_id=booking.booking_id,
             payment_date=datetime.now(),
-            amount=data.amount,
+            amount=amount,
             method=method.id,
             payment_status=status.id         
         )
+
+        paid_status = StatusBooking.get_or_none(StatusBooking.status_name=='Оплачено')
+        if not paid_status:
+            try:
+                paid_status = StatusBooking.create(status_name='Оплачено')
+            except Exception as e:
+                raise HTTPException(500, f'Ошибка при создании статуса оплаты: {e}')
         
-        return {'message': 'Платеж успешно добавлен.',
-                'ID платежа': payments.id}
+        booking.status_id = paid_status.id
+        booking.save()
+        
+        return {
+            'message': 'Платеж успешно добавлен.',
+            'payment_id': payments.id,
+            'amount': amount
+        }
     
     except HTTPException as http_exc:
         raise http_exc
@@ -1057,9 +1151,9 @@ async def search_destinations(country: Optional[str] = None, city: Optional[str]
     try:
         query = Destinations.select()
         if country:
-            query = query.where(Destinations.country.ilike(f"%{country}%"))
+            query = query.where(Destinations.country.ilike(f'%{country}%'))
         if city:
-            query = query.where(Destinations.name.ilike(f"%{city}%"))
+            query = query.where(Destinations.name.ilike(f'%{city}%'))
         destinations = list(query)
         if not destinations:
             raise HTTPException(404, 'Направления по заданным критериям не найдены.')
@@ -1160,7 +1254,7 @@ async def get_destinations_by_tour(tour_name: str, token: str = Header(...)):
             })
         
         if not result:
-            return {"message": "Для этого тура не найдено направлений"}
+            return {'message': 'Для этого тура не найдено направлений'}
         
         return result
     

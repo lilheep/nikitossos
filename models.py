@@ -85,7 +85,7 @@ class Payments(BaseModel):
 class Destinations(BaseModel):
     """Направления для туров"""
     id = AutoField()
-    name = CharField(max_length=255, null=False, unique=True)
+    name = CharField(max_length=255, null=False)
     country = CharField(max_length=255, null=False)
     description = CharField(max_length=255, null=True)
 
@@ -175,6 +175,7 @@ def create_tours():
         print('Туры успешно созданы.')
     except Exception as e:
         print(f'Ошибка при создании туров: {e}')
+        
 def create_status():
     try:
         if StatusBooking.select().count() > 2:
@@ -190,12 +191,120 @@ def create_status():
             {
                 "status_name": "Отказано"
             },
+            {
+                "status_name": "Ожидает оплаты"
+            }
         ]
         for status in status_booking:
             StatusBooking.create(**status)
     except Exception as e:
         print(f'Ошибка при создании статусов заявок: {e}')
+
+def create_payment_status():
+    try:
+        if PaymentStatus.select().count() > 2:
+            print('Статус оплаты уже созданы.')
+            return
         
+        status = [
+            {
+                'status_payment': 'Оплачено'
+            },
+            {
+                'status_payment': 'Отмена'
+            },
+            {
+                'status_payment': 'Ожидается'
+            }
+        ]
+        
+        for st in status:
+            PaymentStatus.create(**st)
+    except Exception as e:
+        print(f'Ошибка при создании статусов оплаты: {e}')
+
+def create_payment_method():
+    try:
+        if PaymentsMethods.select().count() > 1:
+            print('Способы оплаты уже созданы.')
+            return
+        
+        methods = [
+            {
+                'method_name': 'Банковская карта'
+            },
+            {
+                'method_name': 'Наличные'
+            }
+        ]
+        for method in methods:
+            PaymentsMethods.create(**method)
+        print('Способы оплаты успешно созданы.')
+    except Exception as e:
+        print(f'Ошибка при создании способов оплаты: {e}')
+        
+def create_destinations():
+    try:
+        if Destinations.select().count() > 3:
+            print('Тестовые направления уже созданы.')
+            return
+        
+        destinations = [
+            {
+                "name": "Сочи",
+                "country": "Россия",
+                "description": "Прекрасный отдых на черноморском побережье"
+            },
+            {
+                "name": "Горно-Алтайск",
+                "country": "Россия",
+                "description": "Приключения в горах Алтая"
+            },
+            {
+                "name": "Анталия",
+                "country": "Турция",
+                "description": "Все включено на берегу Средиземного моря"
+            },
+            {
+                "name": "Хургада",
+                "country": "Египет",
+                "description": "Погружение в мир коралловых рифов"
+            },
+            {
+                "name": "Рим",
+                "country": "Италия",
+                "description": "Экскурсионный тур по историческим местам"
+            }
+        ]
+        
+        for dest_data in destinations:
+            Destinations.create(**dest_data)
+            
+        print('Направления успешно созданы.')
+    except Exception as e:
+        print(f'Ошибка при создании направлений: {e}')
+        
+def create_tour_destinations():
+    try:
+        if TourDestinations.select().count() > 3:
+            print('Связи туров с направлениями уже созданы.')
+            return
+
+        links = [
+            {"tour_id": 1, "destinations_id": 1},
+            {"tour_id": 2, "destinations_id": 2},
+            {"tour_id": 3, "destinations_id": 3},
+            {"tour_id": 4, "destinations_id": 4},
+            {"tour_id": 5, "destinations_id": 5}
+        ]
+        
+        for link in links:
+            TourDestinations.create(**link)
+            
+        print('Связи туров с направлениями успешно созданы.')
+    except Exception as e:
+        print(f'Ошибка при создании связей: {e}')
+    
         
 try:
     db_connection.connect()
@@ -203,6 +312,10 @@ try:
     create_admin()
     create_tours()
     create_status()
+    create_payment_status()
+    create_payment_method()
+    create_destinations()
+    create_tour_destinations()
 except Exception as e:
     print(f'Error initializing tables: {e}')
 finally:
