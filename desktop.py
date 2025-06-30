@@ -45,15 +45,14 @@ class MainApp:
                 params={'token': self.token},
                 timeout=5
             )
-            
             if response.status_code == 200:
                 self.user_data = response.json()
+                self.user_role = self.user_data.get('role')
                 return True
             else:
                 error = response.json().get('detail', 'Неизвестная ошибка')
                 messagebox.showerror('Ошибка', f'Ошибка загрузки данных: {error}')
                 return False
-                
         except requests.exceptions.RequestException as e:
             messagebox.showerror('Ошибка', f'Не удалось подключиться к серверу: {e}')
             return False
@@ -109,11 +108,12 @@ class MainApp:
             messagebox.showerror('Ошибка', 'Данные пользователя не загружены')
             self.root.destroy()
             return
-            
-        if self.user_data.get('role') == 'Администратор':
+
+        if self.user_role == 'Администратор':
             self.create_admin_content()
         else:
             self.create_user_content()
+
 
     def create_user_content(self):
         welcome_label = tk.Label(

@@ -7,7 +7,7 @@ from database import db_connection
 import hashlib
 import re
 import os
-from models import Users, Tours, StatusBooking, Bookings, PaymentsMethods, PaymentStatus, Payments, Destinations, TourDestinations, PasswordChangeRequest
+from models import Roles, Users, Tours, StatusBooking, Bookings, PaymentsMethods, PaymentStatus, Payments, Destinations, TourDestinations, PasswordChangeRequest
 from pydantic import BaseModel, EmailStr
 from email_utils import send_email, generation_confirmation_code
 from datetime import datetime, timedelta, date
@@ -44,7 +44,7 @@ def get_user_by_token(token: str, required_role: Optional[str] = None) -> Users:
         raise HTTPException(401, 'Неверный или отсутствующий токен.')
     if user.token_expires_at is None or datetime.now() > user.token_expires_at:
         raise HTTPException(401, 'Срок действия токена истек.')
-    if required_role and user.role != required_role:
+    if required_role and user.role.name != required_role:
         raise HTTPException(403, 'Недостаточно прав для выполнения этого действия.')
 
     user.token_expires_at = datetime.now() + timedelta(hours=1)
@@ -168,12 +168,13 @@ async def create_user(email: str, password: str, full_name: str, number_phone: s
             
         hashed_password = hash_password(password=password)
         with db_connection.atomic():
+            user_role = Roles.get(Roles.id == 1)
             Users.create(
                 email=email,
                 password=hashed_password,
                 full_name=full_name,
                 number_phone=number_phone,
-                role='Пользователь'
+                role=user_role
             )
         return {'message': 'Вы успешно зарегистрировались!'}
     
@@ -288,7 +289,7 @@ async def get_profile(token: str):
         'email': user.email,
         'full_name': user.full_name,
         'number_phone': user.number_phone,
-        'role': user.role
+        'role': user.role.name
     }
 
 
@@ -301,16 +302,17 @@ async def set_user_role(data: SetRoleRequest, token: str = Header(...)):
         
         if data.email:
             user = Users.select().where(Users.email == data.email).first()
-        elif data.phone:
-            user = Users.select().where(Users.number_phone == data.phone).first()
+        elif data.number_phone:
+            user = Users.select().where(Users.number_phone == data.number_phone).first()
         
         if not user:
             raise HTTPException(404, 'Пользователь не найден')
         
-        if data.new_role not in ['Пользователь', 'Администратор']:
+        new_role = Roles.get_or_none(Roles.name == data.new_role)
+        if not new_role:
             raise HTTPException(400, 'Недопустимая роль. Допустимые значения: Пользователь, Администратор')
         
-        user.role = data.new_role
+        user.role = new_role
         user.save()
         
         return {
@@ -337,7 +339,7 @@ async def get_all_users(token: str = Header(...)):
         'email': u.email,
         'full_name': u.full_name,
         'number_phone': u.number_phone,
-        'role': u.role
+        'role': u.role.name
     } for u in users]
 
 @app.delete('/users/delete_admin_user/', tags=['Users'])
@@ -348,8 +350,8 @@ async def admin_delete_user(user_id: int, token: str = Header(...)):
     
     try:
         user = Users.get(Users.id == user_id)
-        if user.role == 'Администратор':
-            admins_count = Users.select().where(Users.role == 'Администратор').count()
+        if user.role.name == 'Администратор':
+            admins_count = Users.select().where(Users.role.name == 'Администратор').count()
             if admins_count == 1:
                 raise HTTPException(400, 'Нельзя удалить последнего администратора.')
 

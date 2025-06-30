@@ -16,6 +16,11 @@ class BaseModel(Model):
     class Meta:
         database = db_connection
 
+class Roles(BaseModel):
+    """"Роли для пользователей"""
+    id = AutoField()
+    name = CharField(max_length=20, unique=True, null=False)
+
 class Users(BaseModel):
     """Информация о пользователях"""
     id = AutoField()
@@ -25,7 +30,7 @@ class Users(BaseModel):
     number_phone = CharField(max_length=13, null=False, unique=True)
     token = CharField(null=True, unique=True)
     token_expires_at = DateTimeField(null=True)
-    role = CharField(max_length=20, default='Пользователь')
+    role = ForeignKeyField(Roles, on_delete='CASCADE', null=False, backref='user_role')
     
 class PasswordChangeRequest(BaseModel):
     """"Запросы на смену пароля"""
@@ -35,7 +40,6 @@ class PasswordChangeRequest(BaseModel):
     created_at = DateTimeField(default=datetime.datetime.now())
     expires_at = DateTimeField()
     
-
 class Tours(BaseModel):
     """"Информация о турах"""
     id = AutoField()
@@ -95,13 +99,31 @@ class TourDestinations(BaseModel):
     tour_id = ForeignKeyField(Tours, backref='tour_dest', on_delete='CASCADE', null=False)
     destinations_id = ForeignKeyField(Destinations, backref='dest_tour', on_delete='CASCADE', null=False)
 
-tables = [Users, Tours, StatusBooking, Bookings, PaymentsMethods, PaymentStatus, Payments, Destinations, TourDestinations, PasswordChangeRequest]
-
-
+tables = [Roles, Users, Tours, StatusBooking, Bookings, PaymentsMethods, PaymentStatus, Payments, Destinations, TourDestinations, PasswordChangeRequest]
 
 def initialize_tables():
     db_connection.create_tables(tables, safe=True)
     print('Tables is initialized')
+
+def create_roles():
+    try:
+        if Roles.select().count() > 1:
+            print('Роли уже созданы.')
+            return
+        roles = [
+            {
+                'name': 'Пользователь'
+            },
+            {
+                'name': 'Администратор'
+            }
+        ]
+        
+        for r in roles:
+            Roles.create(**r)
+        print('Роли успешно созданы.')
+    except Exception as e:
+        print(f'Ошибка при создании ролей: {e}')
     
 def create_admin():
     try:
@@ -112,7 +134,7 @@ def create_admin():
                 password=hashlib.sha512(ADMIN_PASSWORD.encode('utf-8')).hexdigest(),
                 full_name='Администратор',
                 number_phone=ADMIN_PHONE,
-                role='Администратор'
+                role=2
                 )
             print('Администратор успешно создан.')
         else:
@@ -309,6 +331,7 @@ def create_tour_destinations():
 try:
     db_connection.connect()
     initialize_tables()
+    create_roles()
     create_admin()
     create_tours()
     create_status()
