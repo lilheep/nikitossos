@@ -722,8 +722,8 @@ def get_booking_by_user(email: str, token: str = Header(...)):
         user = get_user_by_token(token)
         if not user:
             raise HTTPException(401, 'Недействительный токен.')
-        b = Bookings.get_or_none(Bookings.email==email)
-        if not b:
+        bookings = Bookings.select().where(Bookings.email==email)
+        if not bookings:
             raise HTTPException(404, 'Для данного пользователя нет заявок на бронирование.')
         
         return [{
@@ -733,7 +733,7 @@ def get_booking_by_user(email: str, token: str = Header(...)):
             'Статус:': b.status.status_name,
             'Количество человек:': b.number_of_people,
             'Дата рождения:': b.birthday.isoformat()
-        }]
+        } for b in bookings]
     
     except HTTPException as http_exc:
         raise http_exc
