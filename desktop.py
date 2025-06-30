@@ -385,7 +385,9 @@ class MainApp:
             ('Управление турами', self.show_tours_management),
             ('Управление пользователями', self.show_users_management),
             ('Статусы бронирования', self.show_booking_statuses_management),
-            ('Бронирования', self.show_bookings_management)
+            ('Бронирования', self.show_bookings_management),
+            ('Управление платежами', self.show_payments_management),
+            ('Управление направлениями', self.show_destinations_management)
         ]
         
         for text, command in buttons:
@@ -1846,10 +1848,11 @@ class MainApp:
                 timeout=5
             )
             if status_response.status_code == 200:
-                statuses = [s['status_name'] for s in status_response.json()]
+                statuses = [s['Статус'] for s in status_response.json()]
             else:
                 statuses = []
-        except:
+        except Exception as e:
+            print(f"Ошибка при загрузке статусов: {e}")
             statuses = []
 
         status_var = tk.StringVar(value=current_values[4])
@@ -1921,6 +1924,423 @@ class MainApp:
                 
         except requests.exceptions.RequestException as e:
             messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
+    
+    def load_payments(self):
+        for item in self.payments_tree.get_children():
+            self.payments_tree.delete(item)
+        
+        try:
+            response = requests.get(
+                'http://127.0.0.1:8000/payments/get_all_payments/',
+                headers={'token': self.token},
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                payments = response.json()
+                for payment in payments:
+                    self.payments_tree.insert('', 'end', values=(
+                        payment['id'],
+                        payment['Номер бронирования'],
+                        payment['Сумма'],
+                        payment['Дата'],
+                        payment['Метод оплаты'],
+                        payment['Статус оплаты']
+                    ))
+            else:
+                error = response.json().get('detail', 'Неизвестная ошибка')
+                messagebox.showerror('Ошибка', f'Не удалось загрузить платежи: {error}')
+                
+        except requests.exceptions.RequestException as e:
+            messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
+    
+    def show_payments_management(self):
+        payments_window = tk.Toplevel(self.root)
+        payments_window.title('Управление платежами')
+        payments_window.geometry('1200x800')
+
+        tk.Label(
+            payments_window,
+            text='Управление платежами',
+            font=self.title_font
+        ).pack(pady=10)
+
+        btn_frame = tk.Frame(payments_window)
+        btn_frame.pack(pady=10)
+
+        ttk.Button(
+            btn_frame,
+            text='Обновить',
+            command=self.load_payments,
+            style='TButton'
+        ).pack(side='left', padx=10)
+
+        ttk.Button(
+            btn_frame,
+            text='Редактировать',
+            command=self.edit_payment_admin,
+            style='TButton'
+        ).pack(side='left', padx=10)
+
+        ttk.Button(
+            btn_frame,
+            text='Удалить',
+            command=self.delete_payment_admin,
+            style='TButton'
+        ).pack(side='left', padx=10)
+
+        columns = ('ID', 'Номер бронирования', 'Сумма', 'Дата платежа', 'Метод оплаты', 'Статус оплаты')
+        self.payments_tree = ttk.Treeview(payments_window, columns=columns, show='headings')
+        self.payments_tree.pack(fill='both', expand=True, padx=10, pady=10)
+
+        for col in columns:
+            self.payments_tree.heading(col, text=col)
+            self.payments_tree.column(col, width=100, anchor='w')
+
+        scrollbar = ttk.Scrollbar(payments_window, orient='vertical', command=self.payments_tree.yview)
+        self.payments_tree.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side='right', fill='y')
+
+        self.load_payments()
+    
+    def edit_payment_admin(self):
+        selected = self.payments_tree.selection()
+        if not selected:
+            messagebox.showwarning('Предупреждение', 'Выберите платеж')
+            return
+        item = self.payments_tree.item(selected[0])
+        payment_id = item['values'][0]
+        self.open_payment_edit_dialog(payment_id)
+
+    def open_payment_edit_dialog(self, payment_id):
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f'Редактирование платежа #{payment_id}')
+        dialog.geometry('500x400')
+        
+        try:
+            response = requests.get(
+                f'http://127.0.0.1:8000/payments/get_payment_by_id/',
+                headers={'token': self.token},
+                params={'payment_id': payment_id}
+            )
+            
+            if response.status_code != 200:
+                error = response.json().get('detail', 'Ошибка получения данных платежа')
+                messagebox.showerror('Ошибка', error)
+                dialog.destroy()
+                return
+                
+            payment_data = response.json()
+        
+            status_response = requests.get(
+                'http://127.0.0.1:8000/payment_status/get_all_statuses/',
+                headers={'token': self.token},
+                timeout=5
+            )
+            statuses = [s['Статус оплаты'] for s in status_response.json()] if status_response.status_code == 200 else []
+
+            tk.Label(dialog, text='Номер бронирования:').pack(pady=5)
+            booking_var = tk.StringVar(value=payment_data['Номер бронирования'])
+            tk.Entry(dialog, textvariable=booking_var, state='readonly').pack(pady=5)
+            
+            tk.Label(dialog, text='Сумма:').pack(pady=5)
+            amount_var = tk.IntVar(value=payment_data['Сумма'])
+            amount_entry = tk.Entry(dialog, textvariable=amount_var)
+            amount_entry.pack(pady=5)
+            
+            tk.Label(dialog, text='Дата:').pack(pady=5)
+            date_var = tk.StringVar(value=payment_data['Дата'])
+            tk.Entry(dialog, textvariable=date_var, state='readonly').pack(pady=5)
+            
+            tk.Label(dialog, text='Статус оплаты:').pack(pady=5)
+            status_var = tk.StringVar(value=payment_data['Статус оплаты'])
+            status_combobox = ttk.Combobox(dialog, textvariable=status_var, values=statuses, state='readonly')
+            status_combobox.pack(pady=5)
+        
+            def save_changes():
+                try:
+                    response = requests.patch(
+                        'http://127.0.0.1:8000/payments/edit_payment/',
+                        headers={'token': self.token},
+                        json={
+                            'payment_id': payment_id,
+                            'amount': amount_var.get(),
+                            'payment_status_name': status_var.get()
+                        }
+                    )
+                    
+                    if response.status_code == 200:
+                        messagebox.showinfo('Успех', 'Платеж обновлен')
+                        dialog.destroy()
+                        self.load_payments()
+                    else:
+                        error = response.json().get('detail', 'Ошибка обновления')
+                        messagebox.showerror('Ошибка', error)
+                        
+                except requests.exceptions.RequestException as e:
+                    messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
+            
+            ttk.Button(dialog, text='Сохранить', command=save_changes).pack(pady=20)
+            
+        except requests.exceptions.RequestException as e:
+            messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
+            dialog.destroy()
+
+    def delete_payment_admin(self):
+        selected = self.payments_tree.selection()
+        if not selected:
+            messagebox.showwarning('Предупреждение', 'Выберите платеж')
+            return
+            
+        item = self.payments_tree.item(selected[0])
+        payment_id = item['values'][0]
+        
+        if not messagebox.askyesno('Подтверждение', f'Удалить платеж #{payment_id}?'):
+            return
+            
+        try:
+            response = requests.delete(
+                'http://127.0.0.1:8000/payments/delete_payment/',
+                headers={'token': self.token},
+                params={'payment_id': payment_id}
+            )
+            
+            if response.status_code == 200:
+                messagebox.showinfo('Успех', 'Платеж удален')
+                self.load_payments()
+            else:
+                error = response.json().get('detail', 'Ошибка удаления')
+                messagebox.showerror('Ошибка', error)
+                
+        except requests.exceptions.RequestException as e:
+            messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
+    
+    def load_destinations(self):
+        for item in self.dest_tree.get_children():
+            self.dest_tree.delete(item)
+        
+        try:
+            response = requests.get(
+                'http://127.0.0.1:8000/destinations/get_all/',
+                headers={'token': self.token},
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                destinations = response.json()
+                for dest in destinations:
+                    self.dest_tree.insert('', 'end', values=(
+                        dest['id'],
+                        dest['Город'],
+                        dest['Страна'],
+                        dest['Описание']
+                    ))
+            else:
+                error = response.json().get('detail', 'Неизвестная ошибка')
+                messagebox.showerror('Ошибка', f'Не удалось загрузить направления: {error}')
+                
+        except requests.exceptions.RequestException as e:
+            messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
+            
+    
+    def show_destinations_management(self):
+        dest_window = tk.Toplevel(self.root)
+        dest_window.title('Управление направлениями')
+        dest_window.geometry('1000x600')
+        
+        tk.Label(
+            dest_window,
+            text='Управление направлениями',
+            font=self.title_font
+        ).pack(pady=10)
+
+        btn_frame = tk.Frame(dest_window)
+        btn_frame.pack(pady=10)
+        
+        ttk.Button(
+            btn_frame,
+            text='Добавить направление',
+            command=self.add_destination_dialog,
+            style='TButton'
+        ).pack(side='left', padx=10)
+        
+        ttk.Button(
+            btn_frame,
+            text='Обновить список',
+            command=self.load_destinations,
+            style='TButton'
+        ).pack(side='left', padx=10)
+        
+        ttk.Button(
+            btn_frame,
+            text='Редактировать',
+            command=self.edit_destination,
+            style='TButton'
+        ).pack(side='left', padx=10)
+        
+        ttk.Button(
+            btn_frame,
+            text='Удалить',
+            command=self.delete_destination,
+            style='TButton'
+        ).pack(side='left', padx=10)
+
+        columns = ('ID', 'Город', 'Страна', 'Описание')
+        self.dest_tree = ttk.Treeview(dest_window, columns=columns, show='headings')
+        self.dest_tree.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        for col in columns:
+            self.dest_tree.heading(col, text=col)
+            self.dest_tree.column(col, width=100, anchor='w')
+        
+        scrollbar = ttk.Scrollbar(dest_window, orient='vertical', command=self.dest_tree.yview)
+        self.dest_tree.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side='right', fill='y')
+
+        self.dest_menu = tk.Menu(dest_window, tearoff=0)
+        self.dest_menu.add_command(label="Редактировать", command=self.edit_destination)
+        self.dest_menu.add_command(label="Удалить", command=self.delete_destination)
+        self.dest_tree.bind("<Button-3>", self.show_dest_context_menu)
+        
+        self.load_destinations()
+        
+    def show_dest_context_menu(self, event):
+        item = self.dest_tree.identify_row(event.y)
+        if item:
+            self.dest_tree.selection_set(item)
+            self.dest_menu.post(event.x_root, event.y_root)
+
+    def add_destination_dialog(self):
+        dialog = tk.Toplevel(self.root)
+        dialog.title('Добавление направления')
+        dialog.geometry('400x300')
+        
+        tk.Label(dialog, text='Город:').pack(pady=5)
+        city_entry = ttk.Entry(dialog, width=30)
+        city_entry.pack(pady=5)
+        
+        tk.Label(dialog, text='Страна:').pack(pady=5)
+        country_entry = ttk.Entry(dialog, width=30)
+        country_entry.pack(pady=5)
+        
+        tk.Label(dialog, text='Описание:').pack(pady=5)
+        desc_entry = ttk.Entry(dialog, width=30)
+        desc_entry.pack(pady=5)
+    
+        def save_destination():
+            data = {
+                'name': city_entry.get(),
+                'country': country_entry.get(),
+                'description': desc_entry.get()
+            }
+            try:
+                response = requests.post(
+                    'http://127.0.0.1:8000/destinations/create_destination/',
+                    headers={'token': self.token},
+                    json=data
+                )
+                
+                if response.status_code == 200:
+                    messagebox.showinfo('Успех', 'Направление успешно добавлено')
+                    dialog.destroy()
+                    self.load_destinations()
+                else:
+                    error = response.json().get('detail', 'Ошибка добавления')
+                    messagebox.showerror('Ошибка', error)
+                    
+            except requests.exceptions.RequestException as e:
+                messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
+        
+        ttk.Button(dialog, text='Сохранить', command=save_destination).pack(pady=20)
+
+    def edit_destination(self):
+        selected = self.dest_tree.selection()
+        if not selected:
+            messagebox.showwarning('Предупреждение', 'Выберите направление')
+            return
+            
+        item = self.dest_tree.item(selected[0])
+        dest_id = item['values'][0]
+        current_city = item['values'][1]
+        current_country = item['values'][2]
+        current_desc = item['values'][3]
+        
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f'Редактирование направления #{dest_id}')
+        dialog.geometry('400x300')
+        
+        tk.Label(dialog, text='Город:').pack(pady=5)
+        city_var = tk.StringVar(value=current_city)
+        city_entry = ttk.Entry(dialog, textvariable=city_var, width=30)
+        city_entry.pack(pady=5)
+        
+        tk.Label(dialog, text='Страна:').pack(pady=5)
+        country_var = tk.StringVar(value=current_country)
+        country_entry = ttk.Entry(dialog, textvariable=country_var, width=30)
+        country_entry.pack(pady=5)
+        
+        tk.Label(dialog, text='Описание:').pack(pady=5)
+        desc_var = tk.StringVar(value=current_desc)
+        desc_entry = ttk.Entry(dialog, textvariable=desc_var, width=30)
+        desc_entry.pack(pady=5)
+    
+        def save_changes():
+            data = {
+                'name': city_var.get(),
+                'country': country_var.get(),
+                'description': desc_var.get()
+            }
+            try:
+                response = requests.patch(
+                    f'http://127.0.0.1:8000/destinations/update_destination/',
+                    headers={'token': self.token},
+                    params={'destination_id': dest_id},
+                    json=data
+                )
+                
+                if response.status_code == 200:
+                    messagebox.showinfo('Успех', 'Направление обновлено')
+                    dialog.destroy()
+                    self.load_destinations()
+                else:
+                    error = response.json().get('detail', 'Ошибка обновления')
+                    messagebox.showerror('Ошибка', error)
+                    
+            except requests.exceptions.RequestException as e:
+                messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
+        
+        ttk.Button(dialog, text='Сохранить', command=save_changes).pack(pady=20)
+
+    def delete_destination(self):
+        selected = self.dest_tree.selection()
+        if not selected:
+            messagebox.showwarning('Предупреждение', 'Выберите направление')
+            return
+            
+        item = self.dest_tree.item(selected[0])
+        dest_id = item['values'][0]
+        city = item['values'][1]
+        
+        if not messagebox.askyesno('Подтверждение', f'Удалить направление {city}?'):
+            return
+            
+        try:
+            response = requests.delete(
+                'http://127.0.0.1:8000/destinations/delete_destination/',
+                headers={'token': self.token},
+                params={'destination_id': dest_id}
+            )
+            
+            if response.status_code == 200:
+                messagebox.showinfo('Успех', 'Направление удалено')
+                self.load_destinations()
+            else:
+                error = response.json().get('detail', 'Ошибка удаления')
+                messagebox.showerror('Ошибка', error)
+                
+        except requests.exceptions.RequestException as e:
+            messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
+        
 
 class AuthApp:
     def __init__(self, root):

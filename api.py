@@ -518,7 +518,9 @@ async def get_all_status_booking(token: str = Header(...)):
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
         
-    status = StatusBooking.select()
+    status = list(StatusBooking.select())
+    if not status:
+        raise HTTPException(404, 'Статусы бронирования не найдены')
     return [{
         'id': s.id,
         'Статус': s.status_name
@@ -631,7 +633,7 @@ async def update_booking(booking_number: str, data: BookingSchemaUpdate, token: 
         if not booking:
             raise HTTPException(404, 'Бронирование не найдено.')
         
-        if booking.user_id.id != user.id:
+        if user.role != 'Администратор' and booking.user_id.id != user.id:
             raise HTTPException(403, 'Нет прав на изменение этого бронирования.')
 
         if data is not None:
@@ -679,7 +681,7 @@ async def delete_booking(booking_number: str, token: str = Header(...)):
         if not booking:
             raise HTTPException(404, 'Бронирование не найдено.')
 
-        if booking.user_id.id != user.id:
+        if user.role != 'Администратор' and booking.user_id.id != user.id:
             raise HTTPException(403, 'Нет прав на удаление этого бронирования.')
 
         booking.delete_instance()
@@ -702,6 +704,7 @@ async def get_all_bookings(token: str = Header(...)):
         return [{
             'Номер заявки:': b.booking_number,
             'e-mail:': b.email,
+            'Дата рождения:': b.birthday.isoformat(),
             'Название тура:': b.tour_id.name,
             'Дата бронирования:': b.booking_date,
             'Статус:': b.status.status_name,
@@ -1015,24 +1018,22 @@ async def get_all_payments(token: str = Header(...)):
     user = get_user_by_token(token, 'Администратор')
     if not user:
         raise HTTPException(401, 'Неверный токен авторизации.')
-    
     try:
         payments = Payments.select()
-
+        result = []
         for payment in payments:
             booking = Bookings.get_or_none(Bookings.booking_id == payment.booking_id)
             method = PaymentsMethods.get_or_none(PaymentsMethods.id == payment.method)
             status = PaymentStatus.get_or_none(PaymentStatus.id == payment.payment_status)
-            
-            return [{
+            result.append({
                 'id': payment.id,
                 'Номер бронирования': booking.booking_number if booking else None,
                 'Сумма': payment.amount,
                 'Дата': payment.payment_date,
                 'Метод оплаты': method.method_name if method else None,
                 'Статус оплаты': status.status_payment if status else None
-            }]
-        
+            })
+        return result
     
     except Exception as e:
         raise HTTPException(500, f'Ошибка при получении списка платежей: {e}')
