@@ -16,10 +16,10 @@ from typing import Optional
 from pydantic import Field
 import aiofiles
 
-"""Инициализация FastAPI приложения"""
+
+
 app = FastAPI()
 
-"""Настройка CORS для кросс-доменных запросов"""
 app.add_middleware(
     CORSMiddleware,
     allow_origins=['*'],
@@ -34,16 +34,16 @@ IMAGE_DIR = os.path.join(BASE_DIR, 'data', 'images')
 os.makedirs(IMAGE_DIR, exist_ok=True)
 app.mount('/images', StaticFiles(directory=IMAGE_DIR), name='images')
 
-"""Функция хеширования паролей"""
 def hash_password(password: str) -> str:
+    """Функция хеширования паролей"""
     return hashlib.sha512(password.encode('utf-8')).hexdigest()
 
-"""Регулярные выражения для валидации email и телефона"""
 EMAIL_REGEX = r'^[A-Za-zА-Яа-яЁё0-9._%+-]+@[A-Za-zА-Яа-яЁё-]+\.[A-Za-zА-Яа-яЁё-]{2,10}$'
 PHONE_REGEX = r'^[0-9+()\-#]{10,15}$'
 
-"""Функция аутентификации пользователя по токену"""
+
 def get_user_by_token(token: str, required_role: Optional[str] = None) -> Users:
+    """Функция аутентификации пользователя по токену"""
     user = Users.select().where(Users.token==token).first()
     if not user:
         raise HTTPException(401, 'Неверный или отсутствующий токен.')
@@ -56,7 +56,6 @@ def get_user_by_token(token: str, required_role: Optional[str] = None) -> Users:
     user.save()
     return user
 
-"""Pydantic модели для запросов"""
 class AuthRequest(BaseModel):
     """Модель запроса аутентификации"""
     email: str | None = None
@@ -184,7 +183,6 @@ class TourDestinationUpdateSchema(BaseModel):
     new_tour_name: Optional[str] = None
     new_destination_id: Optional[int] = None
 
-"""Эндпоинты для работы с пользователями"""
 @app.post('/users/register/', tags=['Users'])
 async def create_user(email: str, password: str, full_name: str, number_phone: str): 
     """Регистрация нового пользователя"""
@@ -400,7 +398,6 @@ async def admin_delete_user(user_id: int, token: str = Header(...)):
     except Exception as e:
         raise HTTPException(500, f'Ошибка при удалении пользователя: {e}')
 
-"""Эндпоинты для работы с турами"""
 @app.post('/tours/create/', tags=['Tours'])
 async def create_tour(
     name: str = Form(...),
@@ -632,7 +629,6 @@ async def delete_booking_status(status_id: int, token: str = Header(...)):
     except Exception as e:
         raise HTTPException(500, f'Ошибка при удалении статуса: {e}')
 
-"""Эндпоинты для работы с бронированиями"""
 @app.post('/booking/create_booking/', tags=['Bookings'])
 def create_booking(data: BookingSchemaCreate, token: str = Header(...)):
     """Создание нового бронирования"""
@@ -797,8 +793,7 @@ def get_booking_by_user(email: str, token: str = Header(...)):
     
     except Exception as e:
         raise HTTPException(500, f'Ошибка при получении списка бронирований: {e}')
-    
-"""Эндпоинты для работы с методами оплаты"""
+
 @app.post('/payment_methods/create_method/', tags=['Payment Methods'])
 async def create_payment_method(data: PaymentMethodCreateSchema, token: str = Header(...)):
     """Создание метода оплаты (только для администратора)"""
@@ -880,8 +875,7 @@ async def delete_payment_method(data: PaymentMethodDeleteSchema, token: str = He
         raise http_exc
     except Exception as e:
         raise HTTPException(500, f'Ошибка при удалении способа оплаты: {e}')
-    
-"""Эндпоинты для работы со статусами оплаты"""
+
 @app.post('/payment_status/create_status/', tags=['Payment Status'])
 async def create_payment_status(data: PaymentStatusCreateSchema, token: str = Header(...)):
     """Создание статуса оплаты (только для администратора)"""
@@ -960,7 +954,6 @@ async def delete_payment_status(data: PaymentStatusDeleteSchema, token: str = He
     except Exception as e:
         raise HTTPException(500, f'Ошибка при удалении статуса оплаты: {e}')
 
-"""Эндпоинты для работы с платежами"""
 @app.post('/payments/add_payment/', tags=['Payments'])
 async def create_payment(data: PaymentsCreate, token: str = Header(...)):
     """Создание платежа"""
@@ -1130,8 +1123,7 @@ async def delete_payment(payment_id: int, token: str = Header(...)):
         raise http_exc
     except Exception as e:
         raise HTTPException(500, f'Ошибка при удалении платежа: {e}')
-    
-"""Эндпоинты для работы с направлениями"""
+
 @app.post('/destinations/create_destination/', tags=['Destinations'])
 async def create_destination(data: DestinationCreateSchema, token: str = Header(...)):
     """Создание направления (только для администратора)"""
@@ -1249,7 +1241,6 @@ async def search_destinations(country: Optional[str] = None, city: Optional[str]
     except Exception as e:
         raise HTTPException(500, f'Ошибка при поиске направлений: {e}')
 
-"""Эндпоинты для работы со связями тур-направление"""
 @app.post('/tour-destinations/create/', tags=['Tour Destinations'])
 async def create_tour_destination(data: TourDestinationCreateSchema, token: str = Header(...)):
     """Создание связи тур-направление (только для администратора)"""

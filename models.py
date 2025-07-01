@@ -1,3 +1,4 @@
+"""Модели базы данных и инициализация"""
 from peewee import Model, CharField, AutoField, IntegerField, ForeignKeyField, DateTimeField, Check, DateField
 from database import db_connection
 import datetime
@@ -31,7 +32,7 @@ class Users(BaseModel):
     token = CharField(null=True, unique=True)
     token_expires_at = DateTimeField(null=True)
     role = ForeignKeyField(Roles, on_delete='CASCADE', null=False, backref='user_role')
-    
+
 class PasswordChangeRequest(BaseModel):
     """"Запросы на смену пароля"""
     id = AutoField()
@@ -39,7 +40,7 @@ class PasswordChangeRequest(BaseModel):
     code = CharField(max_length=10)
     created_at = DateTimeField(default=datetime.datetime.now())
     expires_at = DateTimeField()
-    
+
 class Tours(BaseModel):
     """"Информация о турах"""
     id = AutoField()
@@ -66,12 +67,12 @@ class Bookings(BaseModel):
     status = ForeignKeyField(StatusBooking, backref='stat', on_delete='SET NULL', null=True)
     number_of_people = IntegerField()
     booking_number = CharField(max_length=20, unique=True, null=False)
-    
+
 class PaymentsMethods(BaseModel):
     """"Способы оплаты"""
     id = AutoField()
     method_name = CharField(max_length=255, null=False, unique=True)
-    
+
 class PaymentStatus(BaseModel):
     """Статусы оплаты"""
     id = AutoField()
@@ -101,11 +102,14 @@ class TourDestinations(BaseModel):
 
 tables = [Roles, Users, Tours, StatusBooking, Bookings, PaymentsMethods, PaymentStatus, Payments, Destinations, TourDestinations, PasswordChangeRequest]
 
+
 def initialize_tables():
+    """Инициализация таблиц в БД"""
     db_connection.create_tables(tables, safe=True)
     print('Tables is initialized')
 
 def create_roles():
+    """Создание базовых ролей"""
     try:
         if Roles.select().count() > 1:
             print('Роли уже созданы.')
@@ -126,6 +130,7 @@ def create_roles():
         print(f'Ошибка при создании ролей: {e}')
     
 def create_admin():
+    """Создание администратора"""
     try:
         admin_email=ADMIN_EMAIL
         if not Users.select().where(Users.email==admin_email).exists():
@@ -144,6 +149,7 @@ def create_admin():
         print(f'Ошибка, не удалось создать администратора: {e}')
 
 def create_tours():
+    """Создание тестовых туров"""
     try:
         if Tours.select().count() > 4:
             print('Тестовые туры уже созданы.')
@@ -199,6 +205,7 @@ def create_tours():
         print(f'Ошибка при создании туров: {e}')
         
 def create_status():
+    """Создание статусов бронирования"""
     try:
         if StatusBooking.select().count() > 2:
             print('Тестовые записи статус созданы.')
@@ -223,6 +230,7 @@ def create_status():
         print(f'Ошибка при создании статусов заявок: {e}')
 
 def create_payment_status():
+    """Создание статусов оплаты"""
     try:
         if PaymentStatus.select().count() > 2:
             print('Статус оплаты уже созданы.')
@@ -246,6 +254,7 @@ def create_payment_status():
         print(f'Ошибка при создании статусов оплаты: {e}')
 
 def create_payment_method():
+    """Создание способов оплаты"""
     try:
         if PaymentsMethods.select().count() > 1:
             print('Способы оплаты уже созданы.')
@@ -266,6 +275,7 @@ def create_payment_method():
         print(f'Ошибка при создании способов оплаты: {e}')
         
 def create_destinations():
+    """Создание направлений"""
     try:
         if Destinations.select().count() > 3:
             print('Тестовые направления уже созданы.')
@@ -307,6 +317,7 @@ def create_destinations():
         print(f'Ошибка при создании направлений: {e}')
         
 def create_tour_destinations():
+    """Создание связей туров и направлений"""
     try:
         if TourDestinations.select().count() > 3:
             print('Связи туров с направлениями уже созданы.')

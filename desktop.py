@@ -8,11 +8,13 @@ from PIL import Image, ImageTk
 from io import BytesIO
 import datetime
 
-# os.environ['TCL_LIBRARY'] = r'C:\Users\User\AppData\Local\Programs\Python\Python311\tcl\tcl8.6'
-# os.environ['TK_LIBRARY'] = r'C:\Users\User\AppData\Local\Programs\Python\Python311\tcl\tk8.6'
+os.environ['TCL_LIBRARY'] = r'C:\Users\User\AppData\Local\Programs\Python\Python311\tcl\tcl8.6'
+os.environ['TK_LIBRARY'] = r'C:\Users\User\AppData\Local\Programs\Python\Python311\tcl\tk8.6'
 
 class MainApp:
+    """Основной класс приложения для управления"""
     def __init__(self, root, token):
+        """Инициализация главного приложения"""
         self.root = root
         self.token = token
         self.user_data = {}
@@ -39,6 +41,7 @@ class MainApp:
         self.create_main_content()
         
     def load_user_data(self):
+        """Загрузка данных пользователя с сервера"""
         try:
             response = requests.get(
                 'http://127.0.0.1:8000/users/me/',
@@ -58,6 +61,7 @@ class MainApp:
             return False
         
     def create_top_bar(self):
+        """Создание верхней панели навигации"""
         self.top_bar = tk.Frame(self.root, bg=self.accent_color, height=60)
         self.top_bar.pack(fill='x', side='top')
         
@@ -101,6 +105,7 @@ class MainApp:
         self.destinations_btn.pack(side="left", padx=10)
         
     def create_main_content(self):
+        """Создание основного контента в зависимости от роли пользователя"""
         self.main_frame = tk.Frame(self.root, bg=self.bg_color)
         self.main_frame.pack(fill='both', expand=True, padx=20, pady=20)
 
@@ -116,6 +121,7 @@ class MainApp:
 
 
     def create_user_content(self):
+        """Создание интерфейса для обычного пользователя"""
         welcome_label = tk.Label(
             self.main_frame,
             text=f"Добро пожаловать, {self.user_data.get('full_name', 'Пользователь')}!",
@@ -177,6 +183,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
 
     def create_tour_card(self, parent, tour):
+        """Создание карточки тура для отображения"""
         tour_card = tk.Frame(
             parent,
             bg=self.card_bg,
@@ -260,6 +267,7 @@ class MainApp:
         ).pack(anchor='e', pady=5)
 
     def book_tour(self, tour):
+        """Оформление бронирования тура"""
         booking_window = tk.Toplevel(self.root)
         booking_window.title(f"Бронирование тура: {tour['name']}")
         booking_window.geometry('800x500')
@@ -329,6 +337,7 @@ class MainApp:
         people_spinbox.pack(anchor='w', pady=5)
         
         def submit_booking():
+            """Создание запроса для создания тура"""
             birthday = birthday_entry.get()
             people = people_var.get()
             
@@ -369,6 +378,7 @@ class MainApp:
         ).pack(pady=20)
 
     def create_admin_content(self):
+        """Создание интерфейса для администратора"""
         welcome_label = tk.Label(
             self.main_frame,
             text='Панель администратора',
@@ -399,6 +409,7 @@ class MainApp:
             ).pack(side='left', padx=10)
 
     def show_profile(self):
+        """Отображение профиля пользователя"""
         if not self.load_user_data():
             messagebox.showerror('Ошибка', 'Не удалось обновить данные профиля')
             return
@@ -451,6 +462,7 @@ class MainApp:
             ).pack(side='left', padx=10)
 
     def show_change_password(self):
+        """Отображение окна смены пароля"""
         change_pass_window = tk.Toplevel(self.root)
         change_pass_window.title('Смена пароля')
         change_pass_window.geometry('400x300')
@@ -473,6 +485,7 @@ class MainApp:
         ).pack(pady=20)
 
     def send_password_code(self, email):
+        """Отправка кода подтверждения для смены пароля"""
         if not email:
             messagebox.showerror('Ошибка', 'Введите email')
             return
@@ -494,7 +507,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Не удалось подключиться к серверу: {e}')
 
     def delete_account(self):
-        
+        """Удаление аккаунта пользователя"""
         if not messagebox.askyesno('Подтверждение', 'Вы уверены, что хотите удалить аккаунт?'):
             return
             
@@ -516,6 +529,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Не удалось подключиться к серверу: {e}')
 
     def show_my_bookings(self):
+        """Отображение бронирований пользователя"""
         if not self.load_user_data():
             messagebox.showerror('Ошибка', 'Не удалось обновить данные профиля')
             return
@@ -544,6 +558,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Не удалось подключиться к серверу: {e}')
     
     def get_selected_booking_number(self):
+        """Получение номера выбранного бронирования"""
         selected_item = self.tree.selection()
         if not selected_item:
             messagebox.showwarning('Предупреждение', 'Выберите заявку из списка')
@@ -553,6 +568,7 @@ class MainApp:
         return item['values'][0]
 
     def edit_selected_booking(self):
+        """Редактирование выбранного бронирования"""
         selected_item = self.tree.selection()
         if not selected_item:
             messagebox.showwarning('Предупреждение', 'Выберите заявку из списка')
@@ -562,12 +578,13 @@ class MainApp:
         self.edit_booking(booking_number)
 
     def delete_selected_booking(self):
+        """Удаление выбранного бронирования"""
         booking_number = self.get_selected_booking_number()
         if booking_number:
             self.delete_booking(booking_number)
                 
     def edit_booking(self, booking_number):
-    
+        """Редактирование бронирования по номеру"""
         booking_data = None
         for booking in self.bookings_data:
             if booking.get('Номер заявки:') == booking_number:
@@ -581,6 +598,7 @@ class MainApp:
         self.open_edit_window(booking_data)
 
     def open_edit_window(self, booking_data):
+        """Открытие окна редактирования бронирования"""
         edit_window = tk.Toplevel(self.root)
         edit_window.title(f"Редактирование заявки {booking_data['Номер заявки:']}")
         edit_window.geometry('500x400')
@@ -609,6 +627,7 @@ class MainApp:
         people_spinbox.pack(anchor='w', pady=5)
 
         def save_changes():
+            """Создание запроса, для сохранения внесенных изменений"""
             birthday = birthday_var.get()
             if not re.match(r'\d{4}-\d{2}-\d{2}', birthday):
                 messagebox.showerror('Ошибка', 'Некорректный формат даты рождения. Используйте ГГГГ-ММ-ДД')
@@ -652,6 +671,7 @@ class MainApp:
         ).pack(pady=20)
 
     def delete_booking(self, booking_number):
+        """Удаление бронирования по номеру"""
         if not messagebox.askyesno('Подтверждение', 'Вы уверены, что хотите удалить эту заявку?'):
             return
             
@@ -675,6 +695,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Не удалось подключиться к серверу: {e}')
 
     def display_bookings(self, bookings):
+        """Отображение списка бронирований"""
         self.bookings_window = tk.Toplevel(self.root)
         self.bookings_window.title('Мои заявки')
         self.bookings_window.geometry('1000x800')
@@ -754,7 +775,7 @@ class MainApp:
         self.pay_btn.pack(side='left', padx=10)
         self.tree.bind('<<TreeviewSelect>>', self.on_booking_select)
     def on_booking_select(self, event):
-        
+        """Обработка выбора бронирования в списке"""
         selected_item = self.tree.selection()
         if not selected_item:
             return
@@ -773,11 +794,13 @@ class MainApp:
             self.pay_btn.config(state='disabled')
     
     def pay_selected_booking(self):
+        """Оплата выбранного бронирования"""
         booking_number = self.get_selected_booking_number()
         if booking_number:
             self.open_payment_window(booking_number)
     
     def open_payment_window(self, booking_number):
+        """Открытие окна оплаты бронирования"""
         payment_window = tk.Toplevel(self.root)
         payment_window.title(f'Оплата заявки {booking_number}')
         payment_window.geometry('600x500')
@@ -830,10 +853,12 @@ class MainApp:
         ).pack(side='left', padx=10)
     
     def clear_placeholder(self, event, placeholder):
+        """Очистка поля ввода"""
         if event.widget.get() == placeholder:
             event.widget.delete(0, tk.END)
     
     def format_expiry_date(self, event):
+        """Форматирование даты действия карты"""
         text = event.widget.get().replace('/', '')
         if len(text) >= 2:
             formatted = text[:2] + '/' + text[2:4]
@@ -841,6 +866,7 @@ class MainApp:
             event.widget.insert(0, formatted)
     
     def validate_card_data(self):
+        """Проверка данных банковской карты"""
         errors = []
         card_data = {}
         
@@ -874,7 +900,7 @@ class MainApp:
         return card_data, errors
     
     def process_payment(self, booking_number, window):
-        
+        """Обработка платежа"""
         card_data, errors = self.validate_card_data()
         
         if errors:
@@ -911,6 +937,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Не удалось подключиться к серверу: {e}')
             
     def show_destinations(self):
+        """Отображение направлений"""
         dest_window = tk.Toplevel(self.root)
         dest_window.title('Направления туров')
         dest_window.geometry('800x600')
@@ -945,6 +972,7 @@ class MainApp:
         self.search_destinations()
 
     def search_destinations(self):
+        """Поиск направлений"""
         for item in self.dest_tree.get_children():
             self.dest_tree.delete(item)
         
@@ -978,6 +1006,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
             
     def display_destinations_for_tour(self, tour_name, destinations):
+        """Отображение направлений для тура"""
         dest_window = tk.Toplevel(self.root)
         dest_window.title(f'Направления тура: {tour_name}')
         dest_window.geometry('800x600')
@@ -1015,6 +1044,7 @@ class MainApp:
         scrollbar.pack(side='right', fill='y')
     
     def show_tour_destinations(self, tour):
+        """Показать направления для конкретного тура"""
         try:
             response = requests.get(
                 'http://127.0.0.1:8000/tour-destinations/get_by_tour/',
@@ -1037,6 +1067,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
             
     def load_users(self):
+        """Загрузка списка пользователей"""
         for item in self.users_tree.get_children():
             self.users_tree.delete(item)
         
@@ -1065,6 +1096,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
         
     def show_users_management(self):
+        """Отображение управления пользователями"""
         users_window = tk.Toplevel(self.root)
         users_window.title('Управление пользователями')
         users_window.geometry('1200x800')
@@ -1111,6 +1143,7 @@ class MainApp:
         self.load_users()
     
     def change_user_role(self):
+        """Изменение роли пользователя"""
         selected = self.users_tree.selection()
         if not selected:
             messagebox.showwarning('Предупреждение', 'Выберите пользователя')
@@ -1131,6 +1164,7 @@ class MainApp:
         role_combobox.pack(pady=10)
         
         def save_role():
+            """Создание запроса, для изменения роли пользователя"""
             new_role = role_var.get()
             if new_role == current_role:
                 messagebox.showinfo('Информация', 'Роль не изменена')
@@ -1166,6 +1200,7 @@ class MainApp:
         ).pack(pady=10)
     
     def delete_user(self):
+        """Удаление пользователя"""
         selected = self.users_tree.selection()
         if not selected:
             messagebox.showwarning('Предупреждение', 'Выберите пользователя')
@@ -1195,6 +1230,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
             
     def load_tours(self):
+        """Загрузка списка туров"""
         if not hasattr(self, 'tours_window') or not self.tours_window.winfo_exists():
             return
 
@@ -1228,6 +1264,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
 
     def show_tours_management(self):
+        """Отображение управления турами"""
         if hasattr(self, 'tours_window') and self.tours_window.winfo_exists():
             self.tours_window.lift()
             return
@@ -1306,6 +1343,7 @@ class MainApp:
         self.load_tours()
     
     def on_tours_window_close(self):
+        """Обработка закрытия окна управления турами"""
         self.tours_window.destroy()
         if hasattr(self, 'tours_tree'):
             del self.tours_tree
@@ -1313,6 +1351,7 @@ class MainApp:
             del self.tours_window
         
     def add_tour_dialog(self):
+        """Диалог добавления нового тура"""
         self.tour_dialog = tk.Toplevel(self.root)
         self.tour_dialog.title('Добавление нового тура')
         self.tour_dialog.geometry('600x500')
@@ -1351,6 +1390,7 @@ class MainApp:
         ).grid(row=len(fields)+1, column=1, pady=20)
     
     def select_image(self):
+        """Выбор изображения для тура"""
         file_path = filedialog.askopenfilename(
             title='Выберите изображение',
             filetypes=[('Изображения', '*.jpg *.jpeg *.png')]
@@ -1359,6 +1399,7 @@ class MainApp:
             self.image_path.set(file_path)
     
     def create_tour(self):
+        """Создание нового тура"""
         tour_data = {}
         for field, entry in self.tour_entries.items():
             tour_data[field] = entry.get()
@@ -1408,6 +1449,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Ошибка при отправке данных: {e}')
         
     def edit_tour_dialog(self):
+        """Диалог редактирования тура"""
         selected = self.tours_tree.selection()
         if not selected:
             messagebox.showwarning('Предупреждение', 'Выберите тур для редактирования')
@@ -1433,6 +1475,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
     
     def edit_tour_window(self, tour_id, tour_data):
+        """Окно редактирования тура"""
         self.edit_window = tk.Toplevel(self.root)
         self.edit_window.title(f'Редактирование тура #{tour_id}')
         self.edit_window.geometry('600x500')
@@ -1461,6 +1504,7 @@ class MainApp:
         ).grid(row=len(fields)+1, column=1, pady=20)
     
     def update_tour(self, tour_id):
+        """Обновление данных тура"""
         tour_data = {}
         for field, entry in self.edit_entries.items():
             tour_data[field] = entry.get()
@@ -1496,6 +1540,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
     
     def delete_tour(self):
+        """Удаление тура"""
         selected = self.tours_tree.selection()
         if not selected:
             messagebox.showwarning('Предупреждение', 'Выберите тур для удаления')
@@ -1524,6 +1569,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
     
     def show_booking_statuses_management(self):
+        """Управление статусами бронирования"""
         status_window = tk.Toplevel(self.root)
         status_window.title('Управление статусами бронирования')
         status_window.geometry('800x600')
@@ -1569,6 +1615,7 @@ class MainApp:
         self.load_booking_statuses()
 
     def load_booking_statuses(self):
+        """Загрузка статусов бронирования"""
         for item in self.status_tree.get_children():
             self.status_tree.delete(item)
         
@@ -1596,6 +1643,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
 
     def add_booking_status(self):
+        """Добавление статуса бронирования"""
         dialog = tk.Toplevel(self.root)
         dialog.title('Добавление статуса')
         dialog.geometry('300x150')
@@ -1612,6 +1660,7 @@ class MainApp:
         ).pack(pady=10)
     
     def save_new_booking_status(self, dialog):
+        """Сохранение нового статуса бронирования"""
         status_name = self.new_status_entry.get().strip()
         if not status_name:
             messagebox.showerror('Ошибка', 'Введите название статуса')
@@ -1639,6 +1688,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
 
     def edit_booking_status(self):
+        """Редактирование статуса бронирования"""
         selected = self.status_tree.selection()
         if not selected:
             messagebox.showwarning('Предупреждение', 'Выберите статус')
@@ -1658,6 +1708,7 @@ class MainApp:
         new_name_entry.pack(pady=10)
         
         def save_edit():
+            """Создание запроса, для изменения статуса бронирования"""
             new_name = new_name_entry.get().strip()
             if not new_name:
                 messagebox.showerror('Ошибка', 'Введите название статуса')
@@ -1692,6 +1743,7 @@ class MainApp:
         ).pack(pady=10)
     
     def delete_booking_status(self):
+        """Удаление статуса бронирования"""
         selected = self.status_tree.selection()
         if not selected:
             messagebox.showwarning('Предупреждение', 'Выберите статус')
@@ -1725,6 +1777,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
     
     def show_bookings_management(self):
+        """Управление бронированиями"""
         bookings_window = tk.Toplevel(self.root)
         bookings_window.title('Управление бронированиями')
         bookings_window.geometry('1200x800')
@@ -1774,6 +1827,7 @@ class MainApp:
         self.load_bookings()
 
     def load_bookings(self):
+        """Загрузка бронирований"""
         for item in self.bookings_tree.get_children():
             self.bookings_tree.delete(item)
         
@@ -1804,6 +1858,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
 
     def edit_booking_admin(self):
+        """Редактирование бронирования администратором"""
         selected = self.bookings_tree.selection()
         if not selected:
             messagebox.showwarning('Предупреждение', 'Выберите бронирование')
@@ -1816,6 +1871,7 @@ class MainApp:
         self.open_booking_edit_dialog(booking_number, values)
 
     def open_booking_edit_dialog(self, booking_number, current_values):
+        """Открытие диалога редактирования бронирования"""
         dialog = tk.Toplevel(self.root)
         dialog.title(f'Редактирование бронирования {booking_number}')
         dialog.geometry('800x600')
@@ -1860,6 +1916,7 @@ class MainApp:
         status_combobox.pack(pady=5)
 
         def save_booking_changes():
+            """Создание запроса на изменение данных бронирования"""
             new_people = people_var.get()
             new_status = status_var.get()
             new_birthday = birthday_var.get()
@@ -1897,6 +1954,7 @@ class MainApp:
         ).pack(pady=20)
 
     def delete_booking_admin(self):
+        """Удаление бронирования администратором"""
         selected = self.bookings_tree.selection()
         if not selected:
             messagebox.showwarning('Предупреждение', 'Выберите бронирование')
@@ -1926,6 +1984,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
     
     def load_payments(self):
+        """Загрузка платежей"""
         for item in self.payments_tree.get_children():
             self.payments_tree.delete(item)
         
@@ -1955,6 +2014,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
     
     def show_payments_management(self):
+        """Управление платежами"""
         payments_window = tk.Toplevel(self.root)
         payments_window.title('Управление платежами')
         payments_window.geometry('1200x800')
@@ -2004,6 +2064,7 @@ class MainApp:
         self.load_payments()
     
     def edit_payment_admin(self):
+        """Редактирование платежа администратором"""
         selected = self.payments_tree.selection()
         if not selected:
             messagebox.showwarning('Предупреждение', 'Выберите платеж')
@@ -2013,6 +2074,7 @@ class MainApp:
         self.open_payment_edit_dialog(payment_id)
 
     def open_payment_edit_dialog(self, payment_id):
+        """Открытие диалога редактирования платежа"""
         dialog = tk.Toplevel(self.root)
         dialog.title(f'Редактирование платежа #{payment_id}')
         dialog.geometry('500x400')
@@ -2058,6 +2120,7 @@ class MainApp:
             status_combobox.pack(pady=5)
         
             def save_changes():
+                """Создание запроса, для изменения платежа"""
                 try:
                     response = requests.patch(
                         'http://127.0.0.1:8000/payments/edit_payment/',
@@ -2087,6 +2150,7 @@ class MainApp:
             dialog.destroy()
 
     def delete_payment_admin(self):
+        """Удаление платежа администратором"""
         selected = self.payments_tree.selection()
         if not selected:
             messagebox.showwarning('Предупреждение', 'Выберите платеж')
@@ -2116,6 +2180,7 @@ class MainApp:
             messagebox.showerror('Ошибка', f'Ошибка соединения: {e}')
     
     def load_destinations(self):
+        """Загрузка направлений"""
         for item in self.dest_tree.get_children():
             self.dest_tree.delete(item)
         
@@ -2144,6 +2209,7 @@ class MainApp:
             
     
     def show_destinations_management(self):
+        """Управление направлениями"""
         dest_window = tk.Toplevel(self.root)
         dest_window.title('Управление направлениями')
         dest_window.geometry('1000x600')
@@ -2205,12 +2271,14 @@ class MainApp:
         self.load_destinations()
         
     def show_dest_context_menu(self, event):
+        """Показ контекстного меню для направлений"""
         item = self.dest_tree.identify_row(event.y)
         if item:
             self.dest_tree.selection_set(item)
             self.dest_menu.post(event.x_root, event.y_root)
 
     def add_destination_dialog(self):
+        """Диалог добавления направления"""
         dialog = tk.Toplevel(self.root)
         dialog.title('Добавление направления')
         dialog.geometry('400x300')
@@ -2228,6 +2296,7 @@ class MainApp:
         desc_entry.pack(pady=5)
     
         def save_destination():
+            """Создание запроса на добавление направления"""
             data = {
                 'name': city_entry.get(),
                 'country': country_entry.get(),
@@ -2254,6 +2323,7 @@ class MainApp:
         ttk.Button(dialog, text='Сохранить', command=save_destination).pack(pady=20)
 
     def edit_destination(self):
+        """Редактирование направления"""
         selected = self.dest_tree.selection()
         if not selected:
             messagebox.showwarning('Предупреждение', 'Выберите направление')
@@ -2285,6 +2355,7 @@ class MainApp:
         desc_entry.pack(pady=5)
     
         def save_changes():
+            """"Создание запроса для обновления направления"""
             data = {
                 'name': city_var.get(),
                 'country': country_var.get(),
@@ -2312,6 +2383,7 @@ class MainApp:
         ttk.Button(dialog, text='Сохранить', command=save_changes).pack(pady=20)
 
     def delete_destination(self):
+        """Удаление направления"""
         selected = self.dest_tree.selection()
         if not selected:
             messagebox.showwarning('Предупреждение', 'Выберите направление')
@@ -2343,7 +2415,9 @@ class MainApp:
         
 
 class AuthApp:
+    """Класс для аутентификации пользователей"""
     def __init__(self, root):
+        """Инициализация приложения аутентификации"""
         self.root = root
         self.root.title('')
         self.root.geometry('1920x1080')
@@ -2368,6 +2442,7 @@ class AuthApp:
         self.token = None
     
     def create_auth_widgets(self):
+        """Создание виджетов аутентификации"""
         tk.Label(
             self.main_frame, 
             text='Добро пожаловать\nВ AN Travel!', 
@@ -2430,6 +2505,7 @@ class AuthApp:
         ).pack(side='left', padx=10)
     
     def show_forgot_password(self):
+        """Отображение окна восстановления пароля"""
         self.forgot_window = tk.Toplevel(self.root)
         self.forgot_window.title('Восстановление пароля')
         self.forgot_window.geometry('600x500')
@@ -2455,6 +2531,7 @@ class AuthApp:
         self.code_frame = tk.Frame(self.forgot_window)
         
     def send_confirmation_code(self):
+        """Отправка кода подтверждения"""
         email = self.email_entry.get().strip()
         if not email:
             messagebox.showerror('Ошибка', 'Введите email')
@@ -2504,6 +2581,7 @@ class AuthApp:
             messagebox.showerror('Ошибка', f'Не удалось подключиться к серверу: {e}')
     
     def confirm_password_change(self):
+        """Подтверждение смены пароля"""
         email = self.email_entry.get().strip()
         code = self.code_entry.get().strip()
         new_password = self.new_password_entry.get().strip()
@@ -2533,10 +2611,12 @@ class AuthApp:
             messagebox.showerror('Ошибка', f'Не удалось подключиться к серверу: {e}')
     
     def is_phone(self, text):
+        """Проверка, является ли текст телефонным номером"""
         cleaned = re.sub(r'\D', '', text)
         return len(cleaned) >= 10
     
     def login(self):
+        """Аутентификация пользователя"""
         login = self.login_entry.get().strip()
         password = self.password_entry.get().strip()
         
@@ -2567,12 +2647,14 @@ class AuthApp:
             messagebox.showerror('Ошибка', f'Не удалось подключиться к серверу: {e}')
 
     def open_main_app(self):
+        """Открытие главного приложения после аутентификации"""
         self.root.destroy()
         root = tk.Tk()
         MainApp(root, self.token)
         root.mainloop()
 
     def show_register(self):
+        """Отображение окна регистрации"""
         register_window = tk.Toplevel(self.root)
         register_window.title('Регистрация')
         register_window.geometry('600x500')
@@ -2640,6 +2722,7 @@ class AuthApp:
         ).pack(pady=20)
     
     def register(self):
+        """Регистрация нового пользователя"""
         data = {
             'email': self.reg_email.get(),
             'password': self.reg_password.get(),
